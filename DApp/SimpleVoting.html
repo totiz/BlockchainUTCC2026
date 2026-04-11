@@ -6,7 +6,7 @@
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
         <script src="web3.js"></script>
         <script type="text/javascript">
-            var contractAddress = '0x6E5175A8B0eeF9AdE227aA114B44D145BDF30e1E';
+            var contractAddress = '0xA3679Ed24Ac11a3890a61B882D8632e9C255AA91';
             var network = "";
             let networkDisplay = "";
             var explorerUrl = "";
@@ -23,6 +23,21 @@
                 }
               ],
               "name": "voteForCandidate",
+              "outputs": [],
+              "payable": false,
+              "stateMutability": "nonpayable",
+              "type": "function"
+            },
+            {
+              "constant": false,
+              "inputs": [
+                {
+                  "internalType": "string",
+                  "name": "candidateName",
+                  "type": "string"
+                }
+              ],
+              "name": "addCandidate",
               "outputs": [],
               "payable": false,
               "stateMutability": "nonpayable",
@@ -57,6 +72,19 @@
                 }
               ],
               "name": "VoteReceived",
+              "type": "event"
+            },
+            {
+              "anonymous": false,
+              "inputs": [
+                {
+                  "indexed": false,
+                  "internalType": "string",
+                  "name": "candidate",
+                  "type": "string"
+                }
+              ],
+              "name": "CandidateAdded",
               "type": "event"
             },
             {
@@ -110,6 +138,21 @@
                   "internalType": "uint256",
                   "name": "",
                   "type": "uint256"
+                }
+              ],
+              "payable": false,
+              "stateMutability": "view",
+              "type": "function"
+            },
+            {
+              "constant": true,
+              "inputs": [],
+              "name": "owner",
+              "outputs": [
+                {
+                  "internalType": "address",
+                  "name": "",
+                  "type": "address"
                 }
               ],
               "payable": false,
@@ -453,6 +496,56 @@
               window.open(url,'_blank');
             }
             
+            // Add new candidate
+            function addNewCandidate() {
+                let candidateName = $("#newCandidateName").val();
+                
+                if (!candidateName || candidateName.trim() === '') {
+                    alert('Please enter a candidate name');
+                    return;
+                }
+                
+                let contract = getVotingContract();
+                let options = {
+                    from: userAccount
+                }
+                
+                // Send a transaction to blockchain
+                contract.methods.addCandidate(candidateName).send(options)
+                .on('error', (error) => { 
+                    console.error(error);
+                    $("#add_candidate_status").text('Failed').css("color", "red");
+                    $("#add_candidate_progress").slideUp();
+                })
+                
+                // Transaction already saved to mempool
+                .on('transactionHash', (transactionHash) => { 
+                    console.log(transactionHash);
+                    let link = explorerUrl + transactionHash;
+                    $("#tx_link").attr("href", link);
+                    $("#tx_link").text(link);
+                    $("#add_candidate_status").text('-');
+                    $("#add_candidate_progress").slideDown();
+                })
+                
+                // Transaction got confirmed
+                .on('confirmation', (confirmationNumber, receipt) => {
+                    console.log('confirmationNumber', confirmationNumber);
+                    console.log(receipt);
+                    $("#add_candidate_status").text('Success').css("color", "green");
+                    
+                    // Clear input field
+                    $("#newCandidateName").val('');
+                    
+                    // Reload candidates
+                    $("#more_candidates").html('');
+                    displayCandidates();
+                    showCandidateCount();
+                    
+                    $("#add_candidate_progress").slideUp();
+                })
+            }
+            
         </script>
             
             
@@ -547,6 +640,18 @@
                       <td class="table-label">Count:</td>
                       <td class="table-value"><span id="candidateCount"></span></td>
                     </tr>
+                    <tr>
+                      <td class="table-label">Add Candidate:</td>
+                      <td class="table-value">
+                        <input id="newCandidateName" class="input is-rounded" style="width:27em;" type="text" placeholder="Enter candidate name" />
+                        <button class="button is-info is-rounded" style="font-size:16px;" onClick="javascript:addNewCandidate();">Add</button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colspan="2" style="text-align: center;">
+                        <progress id="add_candidate_progress" class="progress is-info" max="100" style="display:none;">30%</progress>
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
             </article>
@@ -615,6 +720,12 @@
           <p>
               <span>Status: </span>
               <span id="status_value">
+                -
+              </span>
+            </p>
+            <p>
+              <span>Add Candidate Status: </span>
+              <span id="add_candidate_status">
                 -
               </span>
             </p>

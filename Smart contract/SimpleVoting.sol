@@ -16,15 +16,31 @@ contract Voting {
 
   string[] public candidateList;
 
+  /* Store the contract deployer as the owner
+  */
+  address public owner;
+
   /* Broadcast event when a user voted
   */
   event VoteReceived(address user, string candidate);
+
+  /* Broadcast event when a new candidate is added
+  */
+  event CandidateAdded(string candidate);
+
+  /* Modifier to restrict functions to the contract owner (deployer)
+  */
+  modifier onlyOwner() {
+    require(msg.sender == owner, "Only the contract owner can call this function");
+    _;
+  }
 
   /* This is the constructor which will be called once and only once - when you
   deploy the contract to the blockchain. When we deploy the contract,
   we will pass an array of candidates who will be contesting in the election
   */
   constructor(string[] memory candidateNames) public {
+    owner = msg.sender;
     candidateList = candidateNames;
   }
 
@@ -44,5 +60,11 @@ contract Voting {
 
   function candidateCount() public view returns (uint256) {
       return candidateList.length;
+  }
+
+  // This function allows the owner (deployer) to add new candidates after deployment
+  function addCandidate(string memory candidateName) public onlyOwner {
+    candidateList.push(candidateName);
+    emit CandidateAdded(candidateName);
   }
 }
