@@ -1,24 +1,19 @@
 // SPDX-License-Identifier: MIT
+// Compatible with OpenZeppelin Contracts ^5.6.0
+pragma solidity ^0.8.27;
 
-pragma solidity ^0.6.0;
-pragma experimental ABIEncoderV2;
-// specifies what version of compiler this code will be compiled with
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
-contract Voting {
+contract Voting is Pausable, Ownable {
   /* the mapping field below is equivalent to an associative array or hash.
   */
-
   mapping (string => uint256) votesReceived;
 
   /* Solidity doesn't let you pass in an array of strings in the constructor (yet).
   We will use an array of bytes32 instead to store the list of candidates
   */
-
   string[] public candidateList;
-
-  /* Store the contract deployer as the owner
-  */
-  address public owner;
 
   /* Broadcast event when a user voted
   */
@@ -28,20 +23,21 @@ contract Voting {
   */
   event CandidateAdded(string candidate);
 
-  /* Modifier to restrict functions to the contract owner (deployer)
-  */
-  modifier onlyOwner() {
-    require(msg.sender == owner, "Only the contract owner can call this function");
-    _;
-  }
-
   /* This is the constructor which will be called once and only once - when you
   deploy the contract to the blockchain. When we deploy the contract,
   we will pass an array of candidates who will be contesting in the election
   */
-  constructor(string[] memory candidateNames) public {
-    owner = msg.sender;
+  constructor(string[] memory candidateNames) Ownable(msg.sender) {
     candidateList = candidateNames;
+  }
+
+  // Pause/unpause voting (only owner)
+  function pause() public onlyOwner {
+    _pause();
+  }
+
+  function unpause() public onlyOwner {
+    _unpause();
   }
 
   // This function returns the total votes a candidate has received so far
@@ -51,7 +47,7 @@ contract Voting {
 
   // This function increments the vote count for the specified candidate. This
   // is equivalent to casting a vote
-  function voteForCandidate(string memory candidate) public {
+  function voteForCandidate(string memory candidate) public whenNotPaused {
     votesReceived[candidate] += 1;
 
     // Broadcast voted event
