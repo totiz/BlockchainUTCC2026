@@ -11,7 +11,16 @@
             var tokenDecimals = 18;
             var abi = [
 	{
-		"constant": true,
+		"inputs": [
+			{
+				"name": "initialOwner",
+				"type": "address"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
 		"inputs": [],
 		"name": "name",
 		"outputs": [
@@ -20,72 +29,34 @@
 				"type": "string"
 			}
 		],
-		"payable": false,
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": false,
-		"inputs": [
-			{
-				"name": "_upgradedAddress",
-				"type": "address"
-			}
-		],
-		"name": "deprecate",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"name": "_spender",
-				"type": "address"
-			},
-			{
-				"name": "_value",
-				"type": "uint256"
-			}
-		],
-		"name": "approve",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
 		"inputs": [],
-		"name": "deprecated",
+		"name": "symbol",
 		"outputs": [
 			{
 				"name": "",
-				"type": "bool"
+				"type": "string"
 			}
 		],
-		"payable": false,
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": false,
-		"inputs": [
+		"inputs": [],
+		"name": "decimals",
+		"outputs": [
 			{
-				"name": "_evilUser",
-				"type": "address"
+				"name": "",
+				"type": "uint8"
 			}
 		],
-		"name": "addBlackList",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": true,
 		"inputs": [],
 		"name": "totalSupply",
 		"outputs": [
@@ -94,177 +65,13 @@
 				"type": "uint256"
 			}
 		],
-		"payable": false,
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": false,
 		"inputs": [
 			{
-				"name": "_from",
-				"type": "address"
-			},
-			{
-				"name": "_to",
-				"type": "address"
-			},
-			{
-				"name": "_value",
-				"type": "uint256"
-			}
-		],
-		"name": "transferFrom",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "upgradedAddress",
-		"outputs": [
-			{
-				"name": "",
-				"type": "address"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "balances",
-		"outputs": [
-			{
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "decimals",
-		"outputs": [
-			{
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "maximumFee",
-		"outputs": [
-			{
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "_totalSupply",
-		"outputs": [
-			{
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [],
-		"name": "unpause",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"name": "_maker",
-				"type": "address"
-			}
-		],
-		"name": "getBlackListStatus",
-		"outputs": [
-			{
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"name": "",
-				"type": "address"
-			},
-			{
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "allowed",
-		"outputs": [
-			{
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "paused",
-		"outputs": [
-			{
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [
-			{
-				"name": "who",
+				"name": "account",
 				"type": "address"
 			}
 		],
@@ -275,35 +82,98 @@
 				"type": "uint256"
 			}
 		],
-		"payable": false,
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": false,
-		"inputs": [],
-		"name": "pause",
-		"outputs": [],
-		"payable": false,
+		"inputs": [
+			{
+				"name": "to",
+				"type": "address"
+			},
+			{
+				"name": "value",
+				"type": "uint256"
+			}
+		],
+		"name": "transfer",
+		"outputs": [
+			{
+				"name": "",
+				"type": "bool"
+			}
+		],
 		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
-		"constant": true,
-		"inputs": [],
-		"name": "getOwner",
+		"inputs": [
+			{
+				"name": "spender",
+				"type": "address"
+			},
+			{
+				"name": "value",
+				"type": "uint256"
+			}
+		],
+		"name": "approve",
 		"outputs": [
 			{
 				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"name": "from",
+				"type": "address"
+			},
+			{
+				"name": "to",
+				"type": "address"
+			},
+			{
+				"name": "value",
+				"type": "uint256"
+			}
+		],
+		"name": "transferFrom",
+		"outputs": [
+			{
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"name": "owner",
+				"type": "address"
+			},
+			{
+				"name": "spender",
 				"type": "address"
 			}
 		],
-		"payable": false,
+		"name": "allowance",
+		"outputs": [
+			{
+				"name": "",
+				"type": "uint256"
+			}
+		],
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": true,
 		"inputs": [],
 		"name": "owner",
 		"outputs": [
@@ -312,338 +182,78 @@
 				"type": "address"
 			}
 		],
-		"payable": false,
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": true,
-		"inputs": [],
-		"name": "symbol",
-		"outputs": [
-			{
-				"name": "",
-				"type": "string"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": false,
 		"inputs": [
 			{
-				"name": "_to",
+				"name": "to",
 				"type": "address"
 			},
-			{
-				"name": "_value",
-				"type": "uint256"
-			}
-		],
-		"name": "transfer",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"name": "newBasisPoints",
-				"type": "uint256"
-			},
-			{
-				"name": "newMaxFee",
-				"type": "uint256"
-			}
-		],
-		"name": "setParams",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
 			{
 				"name": "amount",
 				"type": "uint256"
 			}
 		],
-		"name": "issue",
+		"name": "mint",
 		"outputs": [],
-		"payable": false,
 		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
-		"constant": false,
 		"inputs": [
 			{
-				"name": "amount",
+				"name": "value",
 				"type": "uint256"
 			}
 		],
-		"name": "redeem",
+		"name": "burn",
 		"outputs": [],
-		"payable": false,
 		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
-		"constant": true,
-		"inputs": [
-			{
-				"name": "_owner",
-				"type": "address"
-			},
-			{
-				"name": "_spender",
-				"type": "address"
-			}
-		],
-		"name": "allowance",
-		"outputs": [
-			{
-				"name": "remaining",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": true,
 		"inputs": [],
-		"name": "basisPointsRate",
-		"outputs": [
-			{
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
+		"name": "pause",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
-		"constant": true,
-		"inputs": [
-			{
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "isBlackListed",
+		"inputs": [],
+		"name": "unpause",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "paused",
 		"outputs": [
 			{
 				"name": "",
 				"type": "bool"
 			}
 		],
-		"payable": false,
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"constant": false,
 		"inputs": [
 			{
-				"name": "_clearedUser",
+				"name": "user",
 				"type": "address"
-			}
-		],
-		"name": "removeBlackList",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": true,
-		"inputs": [],
-		"name": "MAX_UINT",
-		"outputs": [
-			{
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"name": "newOwner",
-				"type": "address"
-			}
-		],
-		"name": "transferOwnership",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"constant": false,
-		"inputs": [
-			{
-				"name": "_blackListedUser",
-				"type": "address"
-			}
-		],
-		"name": "destroyBlackFunds",
-		"outputs": [],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"name": "_initialSupply",
-				"type": "uint256"
 			},
 			{
-				"name": "_name",
-				"type": "string"
-			},
-			{
-				"name": "_symbol",
-				"type": "string"
-			},
-			{
-				"name": "_decimals",
-				"type": "uint256"
-			}
-		],
-		"payable": false,
-		"stateMutability": "nonpayable",
-		"type": "constructor"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
 				"name": "amount",
 				"type": "uint256"
 			}
 		],
-		"name": "Issue",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "Redeem",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"name": "newAddress",
-				"type": "address"
-			}
-		],
-		"name": "Deprecate",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"name": "feeBasisPoints",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"name": "maxFee",
-				"type": "uint256"
-			}
-		],
-		"name": "Params",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"name": "_blackListedUser",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"name": "_balance",
-				"type": "uint256"
-			}
-		],
-		"name": "DestroyedBlackFunds",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"name": "_user",
-				"type": "address"
-			}
-		],
-		"name": "AddedBlackList",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"name": "_user",
-				"type": "address"
-			}
-		],
-		"name": "RemovedBlackList",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"name": "owner",
-				"type": "address"
-			},
-			{
-				"indexed": true,
-				"name": "spender",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"name": "value",
-				"type": "uint256"
-			}
-		],
-		"name": "Approval",
-		"type": "event"
+		"name": "freeze",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
 	},
 	{
 		"anonymous": false,
@@ -669,14 +279,24 @@
 	},
 	{
 		"anonymous": false,
-		"inputs": [],
-		"name": "Pause",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [],
-		"name": "Unpause",
+		"inputs": [
+			{
+				"indexed": true,
+				"name": "owner",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"name": "spender",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"name": "value",
+				"type": "uint256"
+			}
+		],
+		"name": "Approval",
 		"type": "event"
 	}
 ]
@@ -793,6 +413,16 @@
                     })
 
                     $("#token_address").html(contractAddress)
+
+                    // Query pause status
+                    contract.methods.paused().call().then(isPaused => {
+                      console.log('paused', isPaused)
+                      if (isPaused) {
+                        $("#pause_status_value").text('Paused').css("color", "red");
+                      } else {
+                        $("#pause_status_value").text('Active').css("color", "green");
+                      }
+                    })
                 }
                 catch(err) {
                     console.log(err);
@@ -872,6 +502,104 @@
               })
             }
 
+            function tokenMint() {
+              let mintToAddress = $("#mintToAddress").val()
+              let mintAmountInText = $("#mintAmount").val()
+
+              console.log('mintToAddress: ' + mintToAddress)
+              console.log('mintAmountInText: ' + mintAmountInText)
+
+              let sender = userAccount;
+              let amount = web3.utils.toBN(mintAmountInText) * (10 ** tokenDecimals)
+
+              let option = {
+                from: sender
+              }
+              let contract = new web3.eth.Contract(abi, contractAddress)
+
+              contract.methods.mint(mintToAddress, amount).send(option)
+              .on('error', (error) => { 
+                console.error(error) 
+                $("#mint_status_value").text('Failed: ' + (error.message || error)).css("color", "red");
+              })
+              .on('transactionHash', (transactionHash) => { 
+                console.log(transactionHash)
+                let link = "https://" + network.toLowerCase() + ".etherscan.io/tx/" + transactionHash
+                $("#mint_tx_link").attr("href", link)
+                $("#mint_tx_link").text(link)
+                $("#mint_status_value").text('Pending...').css("color", "orange");
+              })
+              .on('confirmation', (confirmationNumber, receipt) => {
+                  console.log('confirmationNumber', confirmationNumber)
+                  console.log(receipt);
+                  $("#mint_status_value").text('Success').css("color", "green");
+                  reloadInfo();
+              })
+            }
+
+            function tokenFreeze() {
+              let freezeAddress = $("#freezeAddress").val()
+              let freezeAmountInText = $("#freezeAmount").val()
+
+              let sender = userAccount;
+              let amount = web3.utils.toBN(freezeAmountInText) * (10 ** tokenDecimals)
+
+              let contract = new web3.eth.Contract(abi, contractAddress)
+              contract.methods.freeze(freezeAddress, amount).send({ from: sender })
+              .on('error', (error) => { 
+                console.error(error) 
+                $("#freeze_status_value").text('Failed: ' + (error.message || error)).css("color", "red");
+              })
+              .on('transactionHash', (transactionHash) => { 
+                let link = "https://" + network.toLowerCase() + ".etherscan.io/tx/" + transactionHash
+                $("#freeze_tx_link").attr("href", link)
+                $("#freeze_tx_link").text(link)
+                $("#freeze_status_value").text('Pending...').css("color", "orange");
+              })
+              .on('confirmation', (confirmationNumber, receipt) => {
+                  $("#freeze_status_value").text('Success').css("color", "green");
+                  reloadInfo();
+              })
+            }
+
+            function tokenPause() {
+              let contract = new web3.eth.Contract(abi, contractAddress)
+              contract.methods.pause().send({ from: userAccount })
+              .on('error', (error) => { 
+                console.error(error) 
+                $("#pause_status_value").text('Failed: ' + (error.message || error)).css("color", "red");
+              })
+              .on('transactionHash', (transactionHash) => { 
+                let link = "https://" + network.toLowerCase() + ".etherscan.io/tx/" + transactionHash
+                $("#pause_tx_link").attr("href", link)
+                $("#pause_tx_link").text(link)
+                $("#pause_status_value").text('Pending...').css("color", "orange");
+              })
+              .on('confirmation', (confirmationNumber, receipt) => {
+                  $("#pause_status_value").text('Paused').css("color", "green");
+                  reloadInfo();
+              })
+            }
+
+            function tokenUnpause() {
+              let contract = new web3.eth.Contract(abi, contractAddress)
+              contract.methods.unpause().send({ from: userAccount })
+              .on('error', (error) => { 
+                console.error(error) 
+                $("#pause_status_value").text('Failed: ' + (error.message || error)).css("color", "red");
+              })
+              .on('transactionHash', (transactionHash) => { 
+                let link = "https://" + network.toLowerCase() + ".etherscan.io/tx/" + transactionHash
+                $("#pause_tx_link").attr("href", link)
+                $("#pause_tx_link").text(link)
+                $("#pause_status_value").text('Pending...').css("color", "orange");
+              })
+              .on('confirmation', (confirmationNumber, receipt) => {
+                  $("#pause_status_value").text('Unpaused').css("color", "green");
+                  reloadInfo();
+              })
+            }
+
             function openContractOnEtherScan() {
               let url = 'https://' + network + '.etherscan.io/token/' + contractAddress
               window.open(url,'_blank');
@@ -928,7 +656,7 @@
           <div class="hero-body">
             <div class="container">
               <h1 class="title">
-                ERC20 Token Transfer 2
+                ThaiBaht4 (THB4) Token
               </h1>
             </div>
           </div>
@@ -941,7 +669,7 @@
           <span id="warning"></span>
         </p>
         
-        <!-- Ether transfer --> 
+        <!-- Mint & Transfer --> 
         <div class="tile is-ancestor" style="margin-left: 10px; margin-right: 10px;">
           <div class="tile is-parent">
             <article class="tile is-child box notification is-info">
@@ -975,6 +703,106 @@
               </p>
             </article>
           </div>
+          <div class="tile is-parent">
+            <article class="tile is-child box notification is-warning">
+              <p class="title">Mint (Owner Only)</p>
+                <div class="field">
+                  <label class="label">To Address</label>
+                  <div class="control">
+                    <input id="mintToAddress" class="input" type="text" placeholder="target address to mint to">
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label class="label">Amount</label>
+                  <div class="control">
+                    <input id="mintAmount" class="input" type="text" placeholder="amount to mint" value="1000">
+                  </div>
+                </div>
+
+                <div class="field is-grouped">
+                  <div class="control">
+                    <button class="button is-dark" onclick="javascript:tokenMint()">Mint</button>
+                  </div>
+                </div>
+
+                <div style="margin-top: 10px;">
+                  <p>
+                    <span>Mint Tx: </span>
+                    <a id="mint_tx_link" target="_blank" href="#">-</a>
+                  </p>
+                  <p>
+                    <span>Status: </span>
+                    <span id="mint_status_value">-</span>
+                  </p>
+                </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="tile is-ancestor" style="margin-left: 10px; margin-right: 10px;">
+          <div class="tile is-parent">
+            <article class="tile is-child box notification is-danger">
+              <p class="title">Freeze (Owner Only)</p>
+                <div class="field">
+                  <label class="label">User Address</label>
+                  <div class="control">
+                    <input id="freezeAddress" class="input" type="text" placeholder="address to freeze">
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label class="label">Frozen Amount</label>
+                  <div class="control">
+                    <input id="freezeAmount" class="input" type="text" placeholder="amount to freeze" value="0">
+                  </div>
+                </div>
+
+                <div class="field is-grouped">
+                  <div class="control">
+                    <button class="button is-dark" onclick="javascript:tokenFreeze()">Freeze</button>
+                  </div>
+                </div>
+
+                <div style="margin-top: 10px;">
+                  <p>
+                    <span>Tx: </span>
+                    <a id="freeze_tx_link" target="_blank" href="#">-</a>
+                  </p>
+                  <p>
+                    <span>Status: </span>
+                    <span id="freeze_status_value">-</span>
+                  </p>
+                </div>
+            </article>
+          </div>
+          <div class="tile is-parent">
+            <article class="tile is-child box notification is-dark">
+              <p class="title">Pause / Unpause (Owner Only)</p>
+                <div class="field is-grouped">
+                  <div class="control">
+                    <button class="button is-danger" onclick="javascript:tokenPause()">Pause</button>
+                  </div>
+                  <div class="control">
+                    <button class="button is-success" onclick="javascript:tokenUnpause()">Unpause</button>
+                  </div>
+                </div>
+
+                <div style="margin-top: 10px;">
+                  <p>
+                    <span>Tx: </span>
+                    <a id="pause_tx_link" target="_blank" href="#">-</a>
+                  </p>
+                  <p>
+                    <span>Status: </span>
+                    <span id="pause_status_value">-</span>
+                  </p>
+                </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="tile is-ancestor" style="margin-left: 10px; margin-right: 10px;">
           <div class="tile is-parent">
             <article class="tile is-child box notification is-info">
               <p class="title">Wallet</p>
