@@ -225,7 +225,7 @@
 
       async function reloadInfo() {
         if (!contract) return;
-        await Promise.all([refreshUserBalance(), refreshSystemInfo(), refreshWalletBalance()]);
+        await Promise.all([refreshUserBalance(), refreshSystemInfo(), refreshWalletBalance(), loadEvents()]);
       }
 
       // ─── Read helpers ──────────────────────────────────────────────────────
@@ -249,14 +249,18 @@
       async function refreshSystemInfo() {
         if (!contract) return;
         try {
-          var [totalLiab, surplusWei, contractWei] = await Promise.all([
+          var [totalLiab, surplusWei, contractWei, ownerAddr] = await Promise.all([
             contract.methods.totalLiabilities().call(),
             contract.methods.surplus().call(),
-            web3.eth.getBalance(contractAddress)
+            web3.eth.getBalance(contractAddress),
+            contract.methods.owner().call()
           ]);
           $('#sys_total_liabilities').text(parseFloat(web3.utils.fromWei(totalLiab, 'ether')).toFixed(6) + ' ETH');
           $('#sys_surplus').text(parseFloat(web3.utils.fromWei(surplusWei, 'ether')).toFixed(6) + ' ETH');
           $('#sys_contract_balance').text(parseFloat(web3.utils.fromWei(contractWei, 'ether')).toFixed(6) + ' ETH');
+          var isOwner = userAccount && ownerAddr && ownerAddr.toLowerCase() === userAccount.toLowerCase();
+          $('#sys_owner').text(ownerAddr).attr('title', ownerAddr);
+          $('#sys_owner_badge').toggle(isOwner);
         } catch (e) {
           console.error(e);
         }
@@ -331,7 +335,200 @@
           });
       }
 
+      // ─── Admin functions ───────────────────────────────────────────────────
+
+      function depositToSystem() {
+        if (!contract) { showStatus('Contract not loaded.', 'warning'); return; }
+        var amountText = $('#sys_deposit_amount').val().trim();
+        if (!amountText || isNaN(amountText) || parseFloat(amountText) <= 0) {
+          showStatus('Enter a valid amount.', 'danger');
+          return;
+        }
+        var amountWei = web3.utils.toWei(amountText, 'ether');
+
+        setTxStatus('Waiting for MetaMask confirmation…');
+        contract.methods.depositToSystem()
+          .send({ from: userAccount, value: amountWei })
+          .on('transactionHash', function (hash) {
+            setTxLink(hash);
+            setTxStatus('Pending…');
+          })
+          .on('receipt', function () {
+            setTxStatus('Success ✓', 'success');
+            reloadInfo();
+          })
+          .on('error', function (err) {
+            setTxStatus('Failed: ' + (err.message || err), 'danger');
+          });
+      }
+
+      function withdrawFromSystem() {
+        if (!contract) { showStatus('Contract not loaded.', 'warning'); return; }
+        var amountText = $('#sys_withdraw_amount').val().trim();
+        if (!amountText || isNaN(amountText) || parseFloat(amountText) <= 0) {
+          showStatus('Enter a valid amount.', 'danger');
+          return;
+        }
+        var amountWei = web3.utils.toWei(amountText, 'ether');
+
+        setTxStatus('Waiting for MetaMask confirmation…');
+        contract.methods.withdrawFromSystem(amountWei)
+          .send({ from: userAccount })
+          .on('transactionHash', function (hash) {
+            setTxLink(hash);
+            setTxStatus('Pending…');
+          })
+          .on('receipt', function () {
+            setTxStatus('Success ✓', 'success');
+            reloadInfo();
+          })
+          .on('error', function (err) {
+            setTxStatus('Failed: ' + (err.message || err), 'danger');
+          });
+      }
+
+      function addDividendRow() {
+        var row = $('<div class="dividend-row field is-grouped" style="margin-bottom:0.4rem;"></div>');
+        row.append('<div class="control is-expanded"><input class="input is-small dividend-addr" type="text" placeholder="0x… recipient" /></div>');
+        row.append('<div class="control" style="width:8rem;"><input class="input is-small dividend-amount" type="number" step="0.001" min="0" placeholder="ETH" /></div>');
+        var removeBtn = $('<div class="control"><button class="button is-small is-light"></button></div>');
+        removeBtn.find('button').html('<i class="fas fa-times"></i>').on('click', function () {
+          $(this).closest('.dividend-row').remove();
+        });
+        row.append(removeBtn);
+        $('#dividend_rows').append(row);
+      }
+
+      function payDividends() {
+        if (!contract) { showStatus('Contract not loaded.', 'warning'); return; }
+
+        var recipients = [];
+        var amounts = [];
+        var valid = true;
+
+        $('#dividend_rows .dividend-row').each(function () {
+          var addr = $(this).find('.dividend-addr').val().trim();
+          var amtText = $(this).find('.dividend-amount').val().trim();
+
+          if (!web3.utils.isAddress(addr)) {
+            showStatus('Invalid recipient address: ' + addr, 'danger');
+            valid = false; return false;
+          }
+          if (!amtText || isNaN(amtText) || parseFloat(amtText) <= 0) {
+            showStatus('Invalid amount for recipient: ' + addr, 'danger');
+            valid = false; return false;
+          }
+          recipients.push(addr);
+          amounts.push(web3.utils.toWei(amtText, 'ether'));
+        });
+
+        if (!valid) return;
+        if (recipients.length === 0) {
+          showStatus('Add at least one recipient row.', 'warning');
+          return;
+        }
+
+        setTxStatus('Waiting for MetaMask confirmation…');
+        contract.methods.payDividends(recipients, amounts)
+          .send({ from: userAccount })
+          .on('transactionHash', function (hash) {
+            setTxLink(hash);
+            setTxStatus('Pending…');
+          })
+          .on('receipt', function () {
+            setTxStatus('Success ✓', 'success');
+            reloadInfo();
+          })
+          .on('error', function (err) {
+            setTxStatus('Failed: ' + (err.message || err), 'danger');
+          });
+      }
+
       // ─── UI helpers ────────────────────────────────────────────────────────
+
+      function getExplorerBase() {
+        var map = {
+          'Mainnet':  'https://etherscan.io/tx/',
+          'Sepolia':  'https://sepolia.etherscan.io/tx/',
+          'Holesky':  'https://holesky.etherscan.io/tx/',
+          'Optimism': 'https://optimistic.etherscan.io/tx/',
+          'Polygon':  'https://polygonscan.com/tx/'
+        };
+        return map[network] || null;
+      }
+
+      // ─── Events feed ───────────────────────────────────────────────────────
+
+      async function loadEvents() {
+        if (!contract) return;
+        $('#events_loading').show();
+        $('#events_empty').hide();
+        $('#events_table_body').empty();
+
+        try {
+          var latestBlock = await web3.eth.getBlockNumber();
+          var fromBlock = Math.max(0, latestBlock - 50000); // last ~50 k blocks
+
+          var events = await contract.getPastEvents('allEvents', {
+            fromBlock: fromBlock,
+            toBlock: 'latest'
+          });
+
+          // Newest first, cap at 20
+          events.sort(function (a, b) { return b.blockNumber - a.blockNumber; });
+          var recent = events.slice(0, 20);
+
+          $('#events_loading').hide();
+
+          if (recent.length === 0) {
+            $('#events_empty').show();
+            return;
+          }
+
+          var explorerBase = getExplorerBase();
+          recent.forEach(function (evt) {
+            var rv = evt.returnValues;
+            var addr = rv.user || rv.admin || '–';
+            var shortAddr = addr !== '–' ? (addr.slice(0, 8) + '…' + addr.slice(-6)) : '–';
+            var addrCell = addr !== '–'
+              ? '<span title="' + addr + '">' + shortAddr + '</span>' +
+                '<button class="copy-addr-btn" data-addr="' + addr + '" title="Copy address" style="background:none;border:none;cursor:pointer;padding:0 0 0 4px;color:#b5b5b5;vertical-align:middle;">' +
+                  '<i class="fas fa-copy" style="font-size:0.75rem;"></i>' +
+                '</button>'
+              : '–';
+            var amount = rv.amount !== undefined
+              ? parseFloat(web3.utils.fromWei(rv.amount, 'ether')).toFixed(6) + ' ETH'
+              : '–';
+            var txHash = evt.transactionHash;
+            var shortTx = txHash.slice(0, 10) + '…' + txHash.slice(-6);
+            var txCell = explorerBase
+              ? '<a href="' + explorerBase + txHash + '" target="_blank" title="' + txHash + '">' + shortTx + '</a>'
+              : '<span title="' + txHash + '">' + shortTx + '</span>';
+
+            var tagMap = {
+              Deposited:      '<span class="tag is-success is-small">Deposited</span>',
+              Withdrawn:      '<span class="tag is-warning is-small">Withdrawn</span>',
+              DividendPaid:   '<span class="tag is-info is-small">Dividend</span>',
+              SystemDeposited:'<span class="tag is-danger is-small">Sys Deposit</span>',
+              SystemWithdrawn:'<span class="tag is-light is-small" style="border:1px solid #ff3860;color:#ff3860;">Sys Withdraw</span>'
+            };
+            var tag = tagMap[evt.event] || ('<span class="tag is-light is-small">' + evt.event + '</span>');
+
+            $('#events_table_body').append(
+              '<tr>' +
+                '<td>' + tag + '</td>' +
+                '<td style="font-family:monospace;font-size:0.8rem;">' + addrCell + '</td>' +
+                '<td style="text-align:right;">' + amount + '</td>' +
+                '<td style="text-align:right;">' + evt.blockNumber + '</td>' +
+                '<td style="font-size:0.8rem;">' + txCell + '</td>' +
+              '</tr>'
+            );
+          });
+        } catch (e) {
+          $('#events_loading').text('Failed to load events: ' + (e.message || e));
+          console.error('loadEvents:', e);
+        }
+      }
 
       function showStatus(msg, type) {
         // type: 'success' | 'danger' | 'warning' | 'info'
@@ -353,14 +550,7 @@
       }
 
       function setTxLink(hash) {
-        var explorers = {
-          'Mainnet': 'https://etherscan.io/tx/',
-          'Sepolia': 'https://sepolia.etherscan.io/tx/',
-          'Holesky': 'https://holesky.etherscan.io/tx/',
-          'Optimism': 'https://optimistic.etherscan.io/tx/',
-          'Polygon': 'https://polygonscan.com/tx/'
-        };
-        var base = explorers[network];
+        var base = getExplorerBase();
         if (base) {
           $('#tx_link').attr('href', base + hash).text(hash).show();
         } else {
@@ -614,6 +804,16 @@
             <div class="card-content">
               <div class="stat-row">
                 <span class="stat-label">
+                  <i class="fas fa-user-shield" style="margin-right:0.3rem;color:#3273dc;"></i>
+                  Owner
+                </span>
+                <span class="stat-value" style="font-family:monospace; font-size:0.78rem; word-break:break-all; text-align:right;">
+                  <span id="sys_owner">–</span>
+                  <span id="sys_owner_badge" class="tag is-success is-small" style="display:none; margin-left:0.4rem;">you</span>
+                </span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">
                   <i class="fas fa-coins" style="margin-right:0.3rem;color:#3273dc;"></i>
                   Contract Balance (on-chain)
                 </span>
@@ -643,6 +843,95 @@
 
       </div><!-- /columns -->
 
+      <!-- ─── Admin Panel ─────────────────────────────────────────────── -->
+      <div style="margin-top:1.5rem;">
+        <p class="section-title" style="border-left:4px solid #ff3860; padding-left:0.6rem; color:#ff3860;">
+          <i class="fas fa-user-shield" style="margin-right:0.4rem;"></i>Owner / Admin Functions
+          <span style="font-size:0.75rem; font-weight:400; color:#b5b5b5; margin-left:0.5rem;">(only the contract owner can execute these)</span>
+        </p>
+
+        <div class="columns is-multiline">
+
+          <!-- ── Deposit to System ───────────────────────────────── -->
+          <div class="column is-4">
+            <div class="card">
+              <div class="card-header" style="background:#fff0f3;">
+                <p class="card-header-title" style="color:#ff3860;">
+                  <i class="fas fa-plus-circle" style="margin-right:0.5rem;"></i>Deposit to System
+                </p>
+              </div>
+              <div class="card-content">
+                <p style="font-size:0.82rem; color:#7a7a7a; margin-bottom:0.75rem;">
+                  Inject ETH into the system surplus pool. Not credited to any user's balance.
+                </p>
+                <div class="field">
+                  <label class="label">Amount (ETH)</label>
+                  <div class="control has-icons-left">
+                    <input id="sys_deposit_amount" class="input" type="number" step="0.001" min="0" placeholder="e.g. 1.0" />
+                    <span class="icon is-left"><i class="fab fa-ethereum"></i></span>
+                  </div>
+                </div>
+                <button class="button is-fullwidth" style="background:#ff3860; color:#fff;" onclick="depositToSystem()">
+                  <i class="fas fa-plus-circle" style="margin-right:0.5rem;"></i>Deposit to System
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Withdraw from System ───────────────────────────── -->
+          <div class="column is-4">
+            <div class="card">
+              <div class="card-header" style="background:#fff0f3;">
+                <p class="card-header-title" style="color:#ff3860;">
+                  <i class="fas fa-minus-circle" style="margin-right:0.5rem;"></i>Withdraw from System
+                </p>
+              </div>
+              <div class="card-content">
+                <p style="font-size:0.82rem; color:#7a7a7a; margin-bottom:0.75rem;">
+                  Pull surplus ETH to the owner's wallet. Cannot exceed the current surplus.
+                </p>
+                <div class="field">
+                  <label class="label">Amount (ETH)</label>
+                  <div class="control has-icons-left">
+                    <input id="sys_withdraw_amount" class="input" type="number" step="0.001" min="0" placeholder="e.g. 0.5" />
+                    <span class="icon is-left"><i class="fab fa-ethereum"></i></span>
+                  </div>
+                </div>
+                <button class="button is-fullwidth" style="background:#ff3860; color:#fff;" onclick="withdrawFromSystem()">
+                  <i class="fas fa-minus-circle" style="margin-right:0.5rem;"></i>Withdraw from System
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Pay Dividends ──────────────────────────────────── -->
+          <div class="column is-4">
+            <div class="card">
+              <div class="card-header" style="background:#fff0f3;">
+                <p class="card-header-title" style="color:#ff3860;">
+                  <i class="fas fa-gift" style="margin-right:0.5rem;"></i>Pay Dividends
+                </p>
+              </div>
+              <div class="card-content">
+                <p style="font-size:0.82rem; color:#7a7a7a; margin-bottom:0.75rem;">
+                  Batch-credit users from surplus. Total must not exceed the available surplus (max 256 recipients).
+                </p>
+                <div id="dividend_rows">
+                  <!-- rows injected by addDividendRow() -->
+                </div>
+                <button class="button is-small is-light is-fullwidth" style="margin-top:0.4rem;" onclick="addDividendRow()">
+                  <i class="fas fa-plus" style="margin-right:0.3rem;"></i>Add Recipient
+                </button>
+                <button class="button is-fullwidth" style="background:#ff3860; color:#fff; margin-top:0.6rem;" onclick="payDividends()">
+                  <i class="fas fa-gift" style="margin-right:0.5rem;"></i>Pay Dividends
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /admin columns -->
+      </div><!-- /admin panel -->
+
       <!-- ─── Transaction status ──────────────────────────────────────── -->
       <div class="tx-area">
         <p class="tx-label"><i class="fas fa-receipt" style="margin-right:0.4rem;"></i>Last Transaction</p>
@@ -653,6 +942,49 @@
           Explorer: <a id="tx_link" href="#" target="_blank" style="display:none;"></a>
           <span id="tx_link_placeholder" style="color:#b5b5b5; font-size:0.85rem;">–</span>
         </p>
+      </div>
+
+      <!-- ─── Events feed ─────────────────────────────────────────────── -->
+      <div style="margin-top:1.5rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+          <p class="section-title" style="margin-bottom:0; border-left:4px solid #3273dc; padding-left:0.6rem;">
+            <i class="fas fa-history" style="margin-right:0.4rem;"></i>Latest 20 Events
+          </p>
+          <button class="button is-small is-light" onclick="loadEvents()">
+            <i class="fas fa-sync-alt" style="margin-right:0.3rem;"></i>Refresh Events
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-content" style="padding:0;">
+            <p id="events_loading" style="display:none; padding:1rem; color:#7a7a7a; text-align:center;">
+              <i class="fas fa-spinner fa-spin" style="margin-right:0.4rem;"></i>Loading events…
+            </p>
+            <p id="events_empty" style="display:none; padding:1rem; color:#b5b5b5; text-align:center;">
+              No events found in the last 50 000 blocks.
+            </p>
+            <div style="overflow-x:auto;">
+              <table class="table is-fullwidth is-hoverable is-size-7" style="margin-bottom:0;">
+                <thead style="background:#f5f5f5;">
+                  <tr>
+                    <th>Event</th>
+                    <th>Address</th>
+                    <th style="text-align:right;">Amount</th>
+                    <th style="text-align:right;">Block</th>
+                    <th>Tx Hash</th>
+                  </tr>
+                </thead>
+                <tbody id="events_table_body">
+                  <tr>
+                    <td colspan="5" style="text-align:center; color:#b5b5b5; padding:1rem;">
+                      Connect wallet and set contract address to load events.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div><!-- /container -->
@@ -676,6 +1008,18 @@
         $('#tx_link').show();
         $('#tx_link_placeholder').hide();
       };
+
+      // Copy address buttons in events table
+      $(document).on('click', '.copy-addr-btn', function () {
+        var addr = $(this).data('addr');
+        var icon = $(this).find('i');
+        navigator.clipboard.writeText(addr).then(function () {
+          icon.removeClass('fa-copy').addClass('fa-check');
+          setTimeout(function () {
+            icon.removeClass('fa-check').addClass('fa-copy');
+          }, 1500);
+        });
+      });
     </script>
   </body>
 </html>
