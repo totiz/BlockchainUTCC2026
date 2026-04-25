@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SimpleBank DApp</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css" />
+    <script defer src="https://use.fontawesome.com/releases/v5.15.4/js/all.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="web3.js"></script>
+
+    <script type="text/javascript">
+      // ─── ABI ───────────────────────────────────────────────────────────────
+      var contractAddress = '0x4C5FE2c739bEbEB0632E35A3f26359845B650A2F'; // Set your deployed contract address here
+      var abi = [
+        {
+          "inputs": [{ "name": "initialOwner", "type": "address" }],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [],
+          "name": "deposit",
+          "outputs": [],
+          "stateMutability": "payable",
+          "type": "function"
+        },
+        {
+          "inputs": [{ "name": "amount", "type": "uint256" }],
+          "name": "withdraw",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [{ "name": "user", "type": "address" }],
+          "name": "getBalance",
+          "outputs": [{ "name": "", "type": "uint256" }],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [{ "name": "account", "type": "address" }],
+          "name": "balances",
+          "outputs": [{ "name": "balance", "type": "uint256" }],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "surplus",
+          "outputs": [{ "name": "", "type": "uint256" }],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "totalLiabilities",
+          "outputs": [{ "name": "", "type": "uint256" }],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [{ "name": "", "type": "address" }],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "pendingOwner",
+          "outputs": [{ "name": "", "type": "address" }],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "MAX_DIVIDEND_BATCH",
+          "outputs": [{ "name": "", "type": "uint256" }],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "depositToSystem",
+          "outputs": [],
+          "stateMutability": "payable",
+          "type": "function"
+        },
+        {
+          "inputs": [{ "name": "amount", "type": "uint256" }],
+          "name": "withdrawFromSystem",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            { "name": "recipients", "type": "address[]" },
+            { "name": "amounts", "type": "uint256[]" }
+          ],
+          "name": "payDividends",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "name": "user", "type": "address" },
+            { "indexed": false, "name": "amount", "type": "uint256" }
+          ],
+          "name": "Deposited",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "name": "user", "type": "address" },
+            { "indexed": false, "name": "amount", "type": "uint256" }
+          ],
+          "name": "Withdrawn",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "name": "user", "type": "address" },
+            { "indexed": false, "name": "amount", "type": "uint256" }
+          ],
+          "name": "DividendPaid",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "name": "admin", "type": "address" },
+            { "indexed": false, "name": "amount", "type": "uint256" }
+          ],
+          "name": "SystemDeposited",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "name": "admin", "type": "address" },
+            { "indexed": false, "name": "amount", "type": "uint256" }
+          ],
+          "name": "SystemWithdrawn",
+          "type": "event"
+        }
+      ];
+
+      // ─── State ─────────────────────────────────────────────────────────────
+      var web3;
+      var contract;
+      var userAccount = '';
+      var network = '';
+
+      // ─── Init ──────────────────────────────────────────────────────────────
+      window.addEventListener('load', function () {
+        if (typeof window.ethereum !== 'undefined') {
+          web3 = new Web3(window.ethereum);
+          window.ethereum.request({ method: 'eth_requestAccounts' })
+            .then(function () { startApp(); })
+            .catch(function (err) {
+              showStatus('MetaMask connection rejected: ' + (err.message || err), 'danger');
+            });
+
+          window.ethereum.on('accountsChanged', function (accounts) {
+            userAccount = accounts[0] || '';
+            $('#eth_address').text(userAccount);
+            reloadInfo();
+          });
+          window.ethereum.on('chainChanged', function () {
+            window.location.reload();
+          });
+        } else {
+          showStatus('MetaMask not detected. Please install MetaMask.', 'danger');
+        }
+      });
+
+      function startApp() {
+        web3.eth.net.getId().then(function (netId) {
+          switch (Number(netId)) {
+            case 1:        network = 'Mainnet'; break;
+            case 11155111: network = 'Sepolia'; break;
+            case 17000:    network = 'Holesky'; break;
+            case 10:       network = 'Optimism'; break;
+            case 137:      network = 'Polygon'; break;
+            case 31337:    network = 'Hardhat (local)'; break;
+            default:       network = 'Chain ' + netId;
+          }
+          $('#eth_network').text(network);
+        });
+
+        web3.eth.getAccounts().then(function (accounts) {
+          userAccount = accounts[0] || '';
+          $('#eth_address').text(userAccount);
+          $('#check_balance_address').val(userAccount);
+
+          if (contractAddress && contractAddress !== '') {
+            contract = new web3.eth.Contract(abi, contractAddress);
+            $('#contract_address_display').text(contractAddress);
+            reloadInfo();
+          } else {
+            showStatus('Set the contract address in the source file (contractAddress variable) or in the input below.', 'warning');
+          }
+        });
+      }
+
+      function applyContractAddress() {
+        var addr = $('#contract_address_input').val().trim();
+        if (!web3.utils.isAddress(addr)) {
+          showStatus('Invalid contract address.', 'danger');
+          return;
+        }
+        contractAddress = addr;
+        contract = new web3.eth.Contract(abi, contractAddress);
+        $('#contract_address_display').text(contractAddress);
+        clearStatus();
+        reloadInfo();
+      }
+
+      async function reloadInfo() {
+        if (!contract) return;
+        await Promise.all([refreshUserBalance(), refreshSystemInfo(), refreshWalletBalance()]);
+      }
+
+      // ─── Read helpers ──────────────────────────────────────────────────────
+
+      async function refreshWalletBalance() {
+        if (!userAccount) return;
+        var wei = await web3.eth.getBalance(userAccount);
+        $('#wallet_eth').text(parseFloat(web3.utils.fromWei(wei, 'ether')).toFixed(6) + ' ETH');
+      }
+
+      async function refreshUserBalance() {
+        if (!contract || !userAccount) return;
+        try {
+          var wei = await contract.methods.getBalance(userAccount).call();
+          $('#user_bank_balance').text(parseFloat(web3.utils.fromWei(wei, 'ether')).toFixed(6) + ' ETH');
+        } catch (e) {
+          $('#user_bank_balance').text('Error');
+        }
+      }
+
+      async function refreshSystemInfo() {
+        if (!contract) return;
+        try {
+          var [totalLiab, surplusWei, contractWei] = await Promise.all([
+            contract.methods.totalLiabilities().call(),
+            contract.methods.surplus().call(),
+            web3.eth.getBalance(contractAddress)
+          ]);
+          $('#sys_total_liabilities').text(parseFloat(web3.utils.fromWei(totalLiab, 'ether')).toFixed(6) + ' ETH');
+          $('#sys_surplus').text(parseFloat(web3.utils.fromWei(surplusWei, 'ether')).toFixed(6) + ' ETH');
+          $('#sys_contract_balance').text(parseFloat(web3.utils.fromWei(contractWei, 'ether')).toFixed(6) + ' ETH');
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function checkBalance() {
+        if (!contract) { showStatus('Contract not loaded.', 'warning'); return; }
+        var addr = $('#check_balance_address').val().trim();
+        if (!web3.utils.isAddress(addr)) {
+          showStatus('Invalid address to check.', 'danger');
+          return;
+        }
+        try {
+          var wei = await contract.methods.getBalance(addr).call();
+          var eth = parseFloat(web3.utils.fromWei(wei, 'ether')).toFixed(6);
+          $('#check_balance_result').text(eth + ' ETH');
+          clearStatus();
+        } catch (e) {
+          showStatus('Failed to fetch balance: ' + e.message, 'danger');
+        }
+      }
+
+      // ─── Write functions ───────────────────────────────────────────────────
+
+      function deposit() {
+        if (!contract) { showStatus('Contract not loaded.', 'warning'); return; }
+        var amountText = $('#deposit_amount').val().trim();
+        if (!amountText || isNaN(amountText) || parseFloat(amountText) <= 0) {
+          showStatus('Enter a valid deposit amount.', 'danger');
+          return;
+        }
+        var amountWei = web3.utils.toWei(amountText, 'ether');
+
+        setTxStatus('Waiting for MetaMask confirmation…');
+        contract.methods.deposit()
+          .send({ from: userAccount, value: amountWei })
+          .on('transactionHash', function (hash) {
+            setTxLink(hash);
+            setTxStatus('Pending…');
+          })
+          .on('receipt', function () {
+            setTxStatus('Success ✓', 'success');
+            reloadInfo();
+          })
+          .on('error', function (err) {
+            setTxStatus('Failed: ' + (err.message || err), 'danger');
+          });
+      }
+
+      function withdraw() {
+        if (!contract) { showStatus('Contract not loaded.', 'warning'); return; }
+        var amountText = $('#withdraw_amount').val().trim();
+        if (!amountText || isNaN(amountText) || parseFloat(amountText) <= 0) {
+          showStatus('Enter a valid withdrawal amount.', 'danger');
+          return;
+        }
+        var amountWei = web3.utils.toWei(amountText, 'ether');
+
+        setTxStatus('Waiting for MetaMask confirmation…');
+        contract.methods.withdraw(amountWei)
+          .send({ from: userAccount })
+          .on('transactionHash', function (hash) {
+            setTxLink(hash);
+            setTxStatus('Pending…');
+          })
+          .on('receipt', function () {
+            setTxStatus('Success ✓', 'success');
+            reloadInfo();
+          })
+          .on('error', function (err) {
+            setTxStatus('Failed: ' + (err.message || err), 'danger');
+          });
+      }
+
+      // ─── UI helpers ────────────────────────────────────────────────────────
+
+      function showStatus(msg, type) {
+        // type: 'success' | 'danger' | 'warning' | 'info'
+        var cls = { success: 'is-success', danger: 'is-danger', warning: 'is-warning', info: 'is-info' }[type] || 'is-info';
+        $('#global_notification')
+          .removeClass('is-hidden is-success is-danger is-warning is-info')
+          .addClass(cls)
+          .find('#global_notification_text').text(msg);
+      }
+
+      function clearStatus() {
+        $('#global_notification').addClass('is-hidden');
+      }
+
+      function setTxStatus(msg, type) {
+        var colorMap = { success: 'green', danger: 'red', warning: 'orange' };
+        var color = colorMap[type] || '#363636';
+        $('#tx_status').text(msg).css('color', color);
+      }
+
+      function setTxLink(hash) {
+        var explorers = {
+          'Mainnet': 'https://etherscan.io/tx/',
+          'Sepolia': 'https://sepolia.etherscan.io/tx/',
+          'Holesky': 'https://holesky.etherscan.io/tx/',
+          'Optimism': 'https://optimistic.etherscan.io/tx/',
+          'Polygon': 'https://polygonscan.com/tx/'
+        };
+        var base = explorers[network];
+        if (base) {
+          $('#tx_link').attr('href', base + hash).text(hash).show();
+        } else {
+          $('#tx_link').attr('href', '#').text(hash).show();
+        }
+      }
+    </script>
+
+    <style>
+      body { background: #f5f5f5; }
+
+      .hero.is-dark { background: #1a1a2e; }
+
+      .section-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+        color: #363636;
+      }
+
+      .card { border-radius: 10px; }
+
+      .card-header { background: #f0f4ff; border-radius: 10px 10px 0 0; }
+
+      .card-header-title { color: #3273dc; font-weight: 700; }
+
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #ededed;
+      }
+      .stat-row:last-child { border-bottom: none; }
+      .stat-label { color: #7a7a7a; font-size: 0.9rem; }
+      .stat-value { font-weight: 600; color: #363636; font-size: 0.95rem; }
+
+      .balance-highlight {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #3273dc;
+        text-align: center;
+        padding: 0.75rem 0 0.25rem;
+      }
+      .balance-label {
+        font-size: 0.85rem;
+        color: #7a7a7a;
+        text-align: center;
+        margin-bottom: 1rem;
+      }
+
+      .tx-area {
+        background: #fff;
+        border: 1px solid #dbdbdb;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-top: 1.25rem;
+      }
+      .tx-area .tx-label { font-weight: 600; color: #7a7a7a; font-size: 0.85rem; }
+      #tx_link { word-break: break-all; font-size: 0.8rem; }
+
+      .address-chip {
+        background: #f0f4ff;
+        border-radius: 6px;
+        padding: 0.3rem 0.7rem;
+        font-family: monospace;
+        font-size: 0.82rem;
+        word-break: break-all;
+        color: #3273dc;
+      }
+
+      .contract-setup { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+
+      .refresh-btn { cursor: pointer; color: #3273dc; font-size: 0.85rem; }
+      .refresh-btn:hover { text-decoration: underline; }
+    </style>
+  </head>
+
+  <body>
+    <!-- ─── Hero ────────────────────────────────────────────────────────── -->
+    <section class="hero is-dark">
+      <div class="hero-body" style="padding: 1.5rem 3rem;">
+        <div class="container">
+          <h1 class="title has-text-white" style="margin-bottom:0.2rem;">
+            <i class="fas fa-university" style="margin-right:0.5rem;"></i>SimpleBank DApp
+          </h1>
+          <p class="subtitle has-text-grey-light" style="font-size:0.95rem;">
+            Custodial ETH bank — deposit, withdraw, and track balances on-chain
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div class="container" style="padding: 1.5rem 1rem;">
+
+      <!-- ─── Global notification ─────────────────────────────────────── -->
+      <div id="global_notification" class="notification is-hidden" style="margin-bottom:1rem;">
+        <button class="delete" onclick="clearStatus()"></button>
+        <span id="global_notification_text"></span>
+      </div>
+
+      <!-- ─── Wallet info bar ─────────────────────────────────────────── -->
+      <div class="columns is-vcentered" style="margin-bottom: 0.5rem;">
+        <div class="column is-narrow">
+          <span class="tag is-info is-medium">
+            <i class="fas fa-network-wired" style="margin-right:0.4rem;"></i>
+            <span id="eth_network">connecting…</span>
+          </span>
+        </div>
+        <div class="column">
+          <span class="tag is-light is-medium" style="font-family:monospace; font-size:0.8rem;">
+            <i class="fas fa-wallet" style="margin-right:0.4rem;"></i>
+            <span id="eth_address">–</span>
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span class="tag is-light is-medium">
+            Wallet: <strong id="wallet_eth" style="margin-left:0.3rem;">–</strong>
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <a class="refresh-btn" onclick="reloadInfo()">
+            <i class="fas fa-sync-alt"></i> Refresh
+          </a>
+        </div>
+      </div>
+
+      <!-- ─── Contract address setup ──────────────────────────────────── -->
+      <div class="contract-setup">
+        <p style="font-weight:600; margin-bottom:0.5rem;">
+          <i class="fas fa-file-contract" style="margin-right:0.4rem;"></i>Contract Address
+        </p>
+        <div id="contract_address_display" class="address-chip" style="margin-bottom:0.6rem;">
+          (not set — enter below)
+        </div>
+        <div class="field has-addons">
+          <div class="control is-expanded">
+            <input id="contract_address_input" class="input is-small" type="text" placeholder="0x…  paste deployed SimpleBank address" />
+          </div>
+          <div class="control">
+            <button class="button is-info is-small" onclick="applyContractAddress()">Set</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Main grid ───────────────────────────────────────────────── -->
+      <div class="columns is-multiline">
+
+        <!-- ── My Bank Balance ─────────────────────────────────────── -->
+        <div class="column is-4">
+          <div class="card">
+            <div class="card-header">
+              <p class="card-header-title">
+                <i class="fas fa-piggy-bank" style="margin-right:0.5rem;"></i>My Bank Balance
+              </p>
+            </div>
+            <div class="card-content">
+              <div class="balance-highlight" id="user_bank_balance">–</div>
+              <div class="balance-label">Internal balance in SimpleBank</div>
+              <button class="button is-info is-fullwidth is-outlined is-small" onclick="refreshUserBalance()">
+                <i class="fas fa-sync-alt" style="margin-right:0.4rem;"></i>Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Deposit ─────────────────────────────────────────────── -->
+        <div class="column is-4">
+          <div class="card">
+            <div class="card-header">
+              <p class="card-header-title">
+                <i class="fas fa-arrow-circle-down" style="margin-right:0.5rem;"></i>Deposit ETH
+              </p>
+            </div>
+            <div class="card-content">
+              <div class="field">
+                <label class="label">Amount (ETH)</label>
+                <div class="control has-icons-left">
+                  <input id="deposit_amount" class="input" type="number" step="0.001" min="0" placeholder="e.g. 0.1" />
+                  <span class="icon is-left"><i class="fab fa-ethereum"></i></span>
+                </div>
+              </div>
+              <button class="button is-primary is-fullwidth" onclick="deposit()">
+                <i class="fas fa-arrow-circle-down" style="margin-right:0.5rem;"></i>Deposit
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Withdraw ────────────────────────────────────────────── -->
+        <div class="column is-4">
+          <div class="card">
+            <div class="card-header">
+              <p class="card-header-title">
+                <i class="fas fa-arrow-circle-up" style="margin-right:0.5rem;"></i>Withdraw ETH
+              </p>
+            </div>
+            <div class="card-content">
+              <div class="field">
+                <label class="label">Amount (ETH)</label>
+                <div class="control has-icons-left">
+                  <input id="withdraw_amount" class="input" type="number" step="0.001" min="0" placeholder="e.g. 0.05" />
+                  <span class="icon is-left"><i class="fab fa-ethereum"></i></span>
+                </div>
+              </div>
+              <button class="button is-warning is-fullwidth" onclick="withdraw()">
+                <i class="fas fa-arrow-circle-up" style="margin-right:0.5rem;"></i>Withdraw
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Check Any Balance ───────────────────────────────────── -->
+        <div class="column is-6">
+          <div class="card">
+            <div class="card-header">
+              <p class="card-header-title">
+                <i class="fas fa-search" style="margin-right:0.5rem;"></i>Check Balance by Address
+              </p>
+            </div>
+            <div class="card-content">
+              <div class="field has-addons">
+                <div class="control is-expanded">
+                  <input id="check_balance_address" class="input" type="text" placeholder="0x… address to check" />
+                </div>
+                <div class="control">
+                  <button class="button is-info" onclick="checkBalance()">
+                    <i class="fas fa-search"></i>
+                  </button>
+                </div>
+              </div>
+              <p style="margin-top:0.75rem;">
+                Bank balance:
+                <strong id="check_balance_result" style="color:#3273dc;">–</strong>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── System Info ─────────────────────────────────────────── -->
+        <div class="column is-6">
+          <div class="card">
+            <div class="card-header">
+              <p class="card-header-title">
+                <i class="fas fa-chart-bar" style="margin-right:0.5rem;"></i>System Info
+              </p>
+              <button class="card-header-icon" onclick="refreshSystemInfo()" title="Refresh">
+                <span class="icon"><i class="fas fa-sync-alt"></i></span>
+              </button>
+            </div>
+            <div class="card-content">
+              <div class="stat-row">
+                <span class="stat-label">
+                  <i class="fas fa-coins" style="margin-right:0.3rem;color:#3273dc;"></i>
+                  Contract Balance (on-chain)
+                </span>
+                <span class="stat-value" id="sys_contract_balance">–</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">
+                  <i class="fas fa-users" style="margin-right:0.3rem;color:#3273dc;"></i>
+                  Total User Liabilities
+                </span>
+                <span class="stat-value" id="sys_total_liabilities">–</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">
+                  <i class="fas fa-water" style="margin-right:0.3rem;color:#48c774;"></i>
+                  System Surplus
+                </span>
+                <span class="stat-value" id="sys_surplus" style="color:#48c774;">–</span>
+              </div>
+              <p style="font-size:0.78rem; color:#b5b5b5; margin-top:0.75rem;">
+                Surplus = Contract Balance − Total Liabilities.
+                The owner may only withdraw surplus; user funds are always protected.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /columns -->
+
+      <!-- ─── Transaction status ──────────────────────────────────────── -->
+      <div class="tx-area">
+        <p class="tx-label"><i class="fas fa-receipt" style="margin-right:0.4rem;"></i>Last Transaction</p>
+        <p>
+          Status: <strong id="tx_status" style="color:#7a7a7a;">–</strong>
+        </p>
+        <p>
+          Explorer: <a id="tx_link" href="#" target="_blank" style="display:none;"></a>
+          <span id="tx_link_placeholder" style="color:#b5b5b5; font-size:0.85rem;">–</span>
+        </p>
+      </div>
+
+    </div><!-- /container -->
+
+    <footer class="footer" style="padding: 1.5rem;">
+      <div class="content has-text-centered">
+        <p style="font-size:0.85rem; color:#b5b5b5;">
+          <strong>SimpleBank DApp</strong> — Ethereum Workshop &nbsp;|&nbsp;
+          <a href="https://github.com/kulapio/EthereumWorkshop" target="_blank">Open source on GitHub</a>
+        </p>
+      </div>
+    </footer>
+
+    <script>
+      // Show tx_link_placeholder until a real link is available
+      $('#tx_link').on('show', function () { $('#tx_link_placeholder').hide(); });
+      // Override setTxLink to also hide placeholder
+      var _origSetTxLink = setTxLink;
+      setTxLink = function (hash) {
+        _origSetTxLink(hash);
+        $('#tx_link').show();
+        $('#tx_link_placeholder').hide();
+      };
+    </script>
+  </body>
+</html>
