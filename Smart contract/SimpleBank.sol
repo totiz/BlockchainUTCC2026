@@ -1,213 +1,198 @@
 // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-pragma solidity ^0.6.0;
-
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 /**
- * @dev Wrappers over Solidity's arithmetic operations with added overflow
- * checks.
+ * @title  SimpleBank
+ * @author Orbix Tech — Ethereum Workshop
+ * @notice Custodial ETH bank with internal balance accounting, owner-controlled
+ *         system liquidity, and batch dividend distribution.
  *
- * Arithmetic operations in Solidity wrap on overflow. This can easily result
- * in bugs, because programmers usually assume that an overflow raises an
- * error, which is the standard behavior in high level programming languages.
- * `SafeMath` restores this intuition by reverting the transaction when an
- * operation overflows.
+ * @dev    Solvency invariant maintained at all times:
  *
- * Using this library instead of the unchecked operations eliminates an entire
- * class of bugs, so it's recommended to use it always.
+ *             totalLiabilities <= address(this).balance
+ *
+ *         where `totalLiabilities` is the sum of every user's internal balance.
+ *         The owner may only withdraw the *surplus*
+ *         (`address(this).balance - totalLiabilities`), guaranteeing that
+ *         user funds can never be drained through admin actions.
+ *
+ *         Funds enter the contract through three paths:
+ *           1. {deposit}          — credited to the caller's internal balance.
+ *           2. {depositToSystem}  — added to the surplus pool, not credited.
+ *           3. {payDividends}     — moves surplus into user balances
+ *                                   (no new ETH enters the contract).
+ *
+ *         Funds leave the contract through two paths:
+ *           1. {withdraw}            — debits the caller's internal balance.
+ *           2. {withdrawFromSystem}  — debits the surplus pool only.
  */
-library SafeMath {
-    /**
-     * @dev Returns the addition of two unsigned integers, reverting on
-     * overflow.
-     *
-     * Counterpart to Solidity's `+` operator.
-     *
-     * Requirements:
-     * - Addition cannot overflow.
-     */
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
+contract SimpleBank is Ownable2Step, ReentrancyGuard {
+    using Address for address payable;
 
-        return c;
+    // ─── Constants ────────────────────────────────────────────────────────────
+
+    /// @notice Hard cap on `payDividends` batch size to bound gas.
+    uint256 public constant MAX_DIVIDEND_BATCH = 256;
+
+    // ─── Storage ──────────────────────────────────────────────────────────────
+
+    /// @notice Internal ETH balance credited to each user.
+    mapping(address account => uint256 balance) public balances;
+
+    /// @notice Sum of all user balances. Equals the contract's liability to users.
+    uint256 public totalLiabilities;
+
+    // ─── Events ───────────────────────────────────────────────────────────────
+
+    event Deposited(address indexed user, uint256 amount);
+    event Withdrawn(address indexed user, uint256 amount);
+    event DividendPaid(address indexed user, uint256 amount);
+    event SystemDeposited(address indexed admin, uint256 amount);
+    event SystemWithdrawn(address indexed admin, uint256 amount);
+
+    // ─── Custom Errors ────────────────────────────────────────────────────────
+
+    error ZeroAmount();
+    error ZeroAddress();
+    error InsufficientBalance(uint256 available, uint256 requested);
+    error InsufficientSurplus(uint256 surplus, uint256 requested);
+    error LengthMismatch(uint256 recipientsLen, uint256 amountsLen);
+    error EmptyBatch();
+    error BatchTooLarge(uint256 length, uint256 maxLength);
+
+    // ─── Constructor ──────────────────────────────────────────────────────────
+
+    constructor(address initialOwner) Ownable(initialOwner) {
+        if (initialOwner == address(0)) revert ZeroAddress();
+    }
+
+    // ─── User Functions ───────────────────────────────────────────────────────
+
+    /// @notice Deposit ETH and credit it to the caller's internal balance.
+    function deposit() external payable {
+        if (msg.value == 0) revert ZeroAmount();
+        balances[msg.sender] += msg.value;
+        totalLiabilities += msg.value;
+        emit Deposited(msg.sender, msg.value);
     }
 
     /**
-     * @dev Returns the subtraction of two unsigned integers, reverting on
-     * overflow (when the result is negative).
-     *
-     * Counterpart to Solidity's `-` operator.
-     *
-     * Requirements:
-     * - Subtraction cannot overflow.
+     * @notice Withdraw `amount` from the caller's internal balance to their wallet.
+     * @dev    Follows checks-effects-interactions and is `nonReentrant` for
+     *         defense-in-depth.
      */
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b <= a, "SafeMath: subtraction overflow");
-        uint256 c = a - b;
+    function withdraw(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
 
-        return c;
-    }
+        uint256 userBalance = balances[msg.sender];
+        if (userBalance < amount) revert InsufficientBalance(userBalance, amount);
 
-    /**
-     * @dev Returns the multiplication of two unsigned integers, reverting on
-     * overflow.
-     *
-     * Counterpart to Solidity's `*` operator.
-     *
-     * Requirements:
-     * - Multiplication cannot overflow.
-     */
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
-        // benefit is lost if 'b' is also tested.
-        // See: https://github.com/OpenZeppelin/openzeppelin-solidity/pull/522
-        if (a == 0) {
-            return 0;
+        // Effects
+        unchecked {
+            balances[msg.sender] = userBalance - amount;
+            totalLiabilities -= amount; // safe: bounded by sum of balances
         }
 
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
+        // Interaction
+        emit Withdrawn(msg.sender, amount);
+        payable(msg.sender).sendValue(amount);
+    }
 
-        return c;
+    /// @notice Returns the internal balance of `user`.
+    function getBalance(address user) external view returns (uint256) {
+        return balances[user];
+    }
+
+    /// @notice Returns the surplus liquidity not allocated to any user.
+    function surplus() public view returns (uint256) {
+        // address(this).balance is always >= totalLiabilities by construction.
+        return address(this).balance - totalLiabilities;
+    }
+
+    // ─── Admin Functions ──────────────────────────────────────────────────────
+
+    /// @notice Owner injects liquidity into the system pool. Not credited to any user.
+    function depositToSystem() external payable onlyOwner {
+        if (msg.value == 0) revert ZeroAmount();
+        emit SystemDeposited(msg.sender, msg.value);
     }
 
     /**
-     * @dev Returns the integer division of two unsigned integers. Reverts on
-     * division by zero. The result is rounded towards zero.
-     *
-     * Counterpart to Solidity's `/` operator. Note: this function uses a
-     * `revert` opcode (which leaves remaining gas untouched) while Solidity
-     * uses an invalid opcode to revert (consuming all remaining gas).
-     *
-     * Requirements:
-     * - The divisor cannot be zero.
+     * @notice Owner pulls surplus liquidity to the owner address.
+     * @dev    Cannot drain user balances: capped at the current surplus.
      */
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        // Solidity only automatically asserts when dividing by 0
-        require(b > 0, "SafeMath: division by zero");
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+    function withdrawFromSystem(uint256 amount) external onlyOwner nonReentrant {
+        if (amount == 0) revert ZeroAmount();
 
-        return c;
+        uint256 available = surplus();
+        if (available < amount) revert InsufficientSurplus(available, amount);
+
+        emit SystemWithdrawn(msg.sender, amount);
+        payable(owner()).sendValue(amount);
     }
 
     /**
-     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
-     * Reverts when dividing by zero.
-     *
-     * Counterpart to Solidity's `%` operator. This function uses a `revert`
-     * opcode (which leaves remaining gas untouched) while Solidity uses an
-     * invalid opcode to revert (consuming all remaining gas).
-     *
-     * Requirements:
-     * - The divisor cannot be zero.
+     * @notice Batch credit dividends to a list of recipients from system surplus.
+     * @dev    Reverts unless the contract surplus covers the full batch — this
+     *         preserves the solvency invariant. Bounded by {MAX_DIVIDEND_BATCH}.
      */
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        require(b != 0, "SafeMath: modulo by zero");
-        return a % b;
+    function payDividends(
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external onlyOwner {
+        uint256 len = recipients.length;
+        if (len != amounts.length) revert LengthMismatch(len, amounts.length);
+        if (len == 0) revert EmptyBatch();
+        if (len > MAX_DIVIDEND_BATCH) revert BatchTooLarge(len, MAX_DIVIDEND_BATCH);
+
+        // Sum the batch and validate recipients up front.
+        uint256 totalDividends;
+        for (uint256 i; i < len; ) {
+            address recipient = recipients[i];
+            uint256 amount = amounts[i];
+            if (recipient == address(0)) revert ZeroAddress();
+            if (amount == 0) revert ZeroAmount();
+            totalDividends += amount;
+            unchecked { ++i; }
+        }
+
+        // Solvency check: dividends must come from surplus, never from user funds.
+        uint256 available = surplus();
+        if (available < totalDividends) {
+            revert InsufficientSurplus(available, totalDividends);
+        }
+
+        // Credit balances and grow liabilities atomically.
+        totalLiabilities += totalDividends;
+        for (uint256 i; i < len; ) {
+            balances[recipients[i]] += amounts[i];
+            emit DividendPaid(recipients[i], amounts[i]);
+            unchecked { ++i; }
+        }
+    }
+
+    // ─── Fallback ─────────────────────────────────────────────────────────────
+
+    /**
+     * @dev Plain ETH transfers (no calldata) are treated as system deposits when
+     *      sent by the owner, and rejected otherwise. Prevents accidental loss
+     *      of user funds and ensures the solvency invariant cannot be violated
+     *      by stray transfers (which would otherwise inflate `surplus`
+     *      unaccounted-for, but harmlessly — this is a UX guard, not a safety
+     *      one). Users must call {deposit} explicitly.
+     *
+     *      NOTE: This contract can still receive ETH via `selfdestruct` or as
+     *      the recipient of a coinbase block reward. Any such ETH increases
+     *      `surplus()` and is withdrawable by the owner via
+     *      {withdrawFromSystem}; user balances remain untouched.
+     */
+    receive() external payable {
+        if (msg.sender != owner()) revert ZeroAmount();
+        emit SystemDeposited(msg.sender, msg.value);
     }
 }
-
-
-
-/// @title SimpleBank
-/// @author nemild, kor, tot
-
-/* 'contract' has similarities to 'class' in other languages (class variables,
-inheritance, etc.) */
-contract SimpleBank { // CamelCase
-    using SafeMath for uint256;
-    // Declare state variables outside function, persist through life of contract
-
-    // dictionary that maps addresses to balances
-    mapping (address => uint256) private balances;
-    
-    // Users in system
-    address[] accounts;
-    
-    // Interest rate
-    uint256 rate = 3;
-
-    // "private" means that other contracts can't directly query balances
-    // but data is still viewable to other parties on blockchain
-
-    address public owner;
-    // 'public' makes externally readable (not writeable) by users or contracts
-
-    // Events - publicize actions to external listeners
-    event DepositMade(address accountAddress, uint amount);
-
-    // Constructor, can receive one or many variables here; only one allowed
-    constructor() public {
-        // msg provides details about the message that's sent to the contract
-        // msg.sender is contract caller (address of contract creator)
-        owner = msg.sender;
-    }
-
-    /// @notice Deposit ether into bank
-    /// @return The balance of the user after the deposit is made
-    function deposit() public payable returns (uint256) {
-        // Record account in array for looping
-        if (0 == balances[msg.sender]) {
-            accounts.push(msg.sender);
-        }
-        
-        balances[msg.sender] = balances[msg.sender].add(msg.value);
-        // no "this." or "self." required with state variable
-        // all values set to data type's initial value by default
-
-        emit DepositMade(msg.sender, msg.value); // fire event
-
-        return balances[msg.sender];
-    }
-
-    /// @notice Withdraw ether from bank
-    /// @dev This does not return any excess ether sent to it
-    /// @param withdrawAmount amount you want to withdraw
-    /// @return remainingBal The balance remaining for the user
-    function withdraw(uint withdrawAmount) public returns (uint256 remainingBal) {
-        require(balances[msg.sender] >= withdrawAmount);
-        balances[msg.sender] = balances[msg.sender].sub(withdrawAmount);
-
-        // Revert on failed
-        msg.sender.transfer(withdrawAmount);
-        
-        return balances[msg.sender];
-    }
-
-    /// @notice Get balance
-    /// @return The balance of the user
-    // 'constant' prevents function from editing state variables;
-    // allows function to run locally/off blockchain
-    function balance() public view returns (uint256) {
-        return balances[msg.sender];
-    }
-
-    // Fallback function - Called if other functions don't match call or
-    // sent ether without data
-    // Typically, called when invalid data is sent
-    // Added so ether sent to this contract is reverted if the contract fails
-    // otherwise, the sender's money is transferred to contract
-    fallback () external {
-        revert(); // throw reverts state to before call
-    }
-    
-    function calculateInterest(address user, uint256 _rate) private view returns(uint256) {
-        uint256 interest = balances[user].mul(_rate).div(100);
-        return interest;
-    }
-    
-    function increaseYear() public {
-        for(uint256 i = 0; i < accounts.length; i++) {
-            address account = accounts[i];
-            uint256 interest = calculateInterest(account, rate);
-            balances[account] = balances[account].add(interest);
-        }
-    }
-    
-    function systemBalance() public view returns(uint256) {
-        return address(this).balance;
-    }
-}
-// ** END EXAMPLE **
