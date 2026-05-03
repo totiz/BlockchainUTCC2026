@@ -1,0 +1,2944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>How Ondo Finance Works — An Architectural Explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,100..900,0..100;1,9..144,100..900,0..100&family=JetBrains+Mono:wght@200;300;400;500;600&family=Spectral:ital,wght@0,200;0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* INK */
+    --ink:        #0a0a0d;
+    --ink-2:      #111118;
+    --ink-3:      #181820;
+    --line:       #2a2a35;
+    --line-soft:  #1d1d27;
+    --line-fine:  #161620;
+
+    /* PAPER */
+    --paper:      #f1ead8;
+    --paper-2:    #e2d8be;
+    --bone:       #c8bda2;
+    --dust:       #a39879;
+    --muted:      #7d7560;
+    --muted-2:    #5d5645;
+
+    /* ACCENT */
+    --gold:       #c9a961;
+    --gold-2:     #a8893f;
+    --gold-soft:  #ddc189;
+    --emerald:    #4a7a5e;
+    --emerald-2:  #2d5a3f;
+    --emerald-deep: #1a3826;
+    --oxblood:    #8b1a2b;
+    --rust:       #b85742;
+
+    /* TYPE */
+    --serif:      'Fraunces', 'Spectral', Georgia, serif;
+    --body:       'Spectral', Georgia, serif;
+    --mono:       'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; background: var(--ink); }
+  body {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.65;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* === FILM GRAIN + PAPER TEXTURE === */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.045;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  /* Vignette */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 9998;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
+  }
+
+  ::selection { background: var(--gold); color: var(--ink); }
+  a { color: inherit; text-decoration: none; }
+
+  /* === TICKER === */
+  .ticker {
+    background: var(--ink-2);
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  .ticker-track {
+    display: flex;
+    gap: 3rem;
+    animation: scroll 80s linear infinite;
+    white-space: nowrap;
+    padding-left: 3rem;
+  }
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  .ticker-item {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .ticker-item strong {
+    color: var(--paper);
+    font-weight: 400;
+  }
+  .ticker-item .up { color: var(--emerald); }
+  .ticker-item .accent { color: var(--gold); }
+  .ticker-item .div {
+    width: 6px; height: 6px;
+    border: 1px solid var(--line);
+    transform: rotate(45deg);
+    margin: 0 0.5rem;
+  }
+
+  /* === LAYOUT === */
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 2.5rem;
+  }
+  .container-wide {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 0 2.5rem;
+  }
+  @media (max-width: 768px) {
+    .container, .container-wide { padding: 0 1.4rem; }
+    body { font-size: 16px; }
+  }
+
+  /* === SECTION === */
+  section {
+    padding: 7rem 0;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+  @media (max-width: 768px) { section { padding: 4.5rem 0; } }
+
+  /* Section number — oversized roman as decorative element */
+  .sec-marker {
+    position: absolute;
+    top: 4rem;
+    right: 2.5rem;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: clamp(7rem, 15vw, 14rem);
+    font-weight: 200;
+    color: var(--ink-3);
+    line-height: 1;
+    letter-spacing: -0.05em;
+    pointer-events: none;
+    user-select: none;
+    z-index: 0;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  @media (max-width: 768px) {
+    .sec-marker { font-size: 5rem; top: 2rem; right: 1.4rem; opacity: 0.5; }
+  }
+
+  /* Engraved rule with fleuron */
+  .rule {
+    height: 1px;
+    background: var(--line);
+    position: relative;
+    margin: 0;
+  }
+  .rule.fleur::after {
+    content: '❖';
+    position: absolute;
+    top: -10px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--gold);
+    padding: 0 1rem;
+    font-size: 14px;
+    letter-spacing: 0.5em;
+  }
+  .rule.dual {
+    height: 4px;
+    background: linear-gradient(180deg, var(--line) 0%, var(--line) 1px, transparent 1px, transparent 3px, var(--line) 3px, var(--line) 4px);
+  }
+
+  /* === HERO === */
+  .hero {
+    padding: 5rem 0 6rem;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 5rem;
+    align-items: end;
+    position: relative;
+    z-index: 2;
+  }
+  @media (max-width: 1000px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 3rem; }
+  }
+  /* Background watermark */
+  .hero-watermark {
+    position: absolute;
+    top: 50%; right: -2rem;
+    transform: translateY(-50%);
+    font-family: var(--serif);
+    font-size: 28rem;
+    font-weight: 200;
+    color: var(--ink-2);
+    line-height: 0.85;
+    letter-spacing: -0.05em;
+    pointer-events: none;
+    user-select: none;
+    z-index: 0;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    font-style: italic;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 2.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 40px; height: 1px;
+    background: var(--gold);
+  }
+  .eyebrow::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+    max-width: 200px;
+  }
+
+  h1.headline {
+    font-family: var(--serif);
+    font-weight: 200;
+    font-size: clamp(3rem, 8.5vw, 7.5rem);
+    line-height: 0.92;
+    letter-spacing: -0.035em;
+    margin-bottom: 2.5rem;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    color: var(--paper);
+  }
+  h1.headline em {
+    font-style: italic;
+    font-weight: 200;
+    color: var(--gold);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    display: inline-block;
+  }
+  h1.headline .accent-rule {
+    display: inline-block;
+    width: 0.8em;
+    height: 0.06em;
+    background: var(--gold);
+    vertical-align: middle;
+    margin: 0 0.2em;
+  }
+
+  .lede {
+    font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+    line-height: 1.6;
+    color: var(--bone);
+    max-width: 640px;
+    font-weight: 300;
+    margin-bottom: 3rem;
+  }
+  .lede::first-letter {
+    font-family: var(--serif);
+    font-size: 3.4em;
+    float: left;
+    line-height: 0.85;
+    margin: 0.05em 0.12em -0.05em -0.02em;
+    color: var(--gold);
+    font-weight: 300;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    font-style: italic;
+  }
+
+  .byline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding-top: 2rem;
+    border-top: 1px solid var(--line);
+  }
+  @media (max-width: 768px) {
+    .byline { grid-template-columns: repeat(2, 1fr); gap: 1.2rem; }
+  }
+  .byline > div strong {
+    display: block;
+    color: var(--paper);
+    font-weight: 400;
+    margin-top: 6px;
+    font-size: 12.5px;
+    font-family: var(--serif);
+    letter-spacing: 0;
+    font-style: italic;
+    font-variation-settings: "opsz" 24, "SOFT" 50;
+  }
+
+  /* Hero side panel — schematic */
+  .hero-side {
+    border: 1px solid var(--line);
+    background: var(--ink-2);
+    padding: 1.5rem;
+    position: relative;
+  }
+  .hero-side::before, .hero-side::after,
+  .hero-side > .corner-tl, .hero-side > .corner-br {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    border: 1px solid var(--gold);
+  }
+  .hero-side::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .hero-side::after { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+  .hero-side .corner-tl { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+  .hero-side .corner-br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+  .schema-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    text-align: center;
+    padding: 0.6rem 0 1rem;
+    border-bottom: 1px dashed var(--line);
+    margin-bottom: 1.2rem;
+  }
+  .schema-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-top: 1.2rem;
+    padding-top: 1.2rem;
+    border-top: 1px dashed var(--line);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .schema-meta strong {
+    display: block;
+    color: var(--paper);
+    margin-top: 3px;
+    font-family: var(--serif);
+    font-size: 13px;
+    letter-spacing: 0;
+    font-weight: 400;
+    text-transform: none;
+  }
+
+  /* === SECTION HEAD === */
+  .section-head {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 3rem;
+    margin-bottom: 5rem;
+    align-items: start;
+    position: relative;
+    z-index: 1;
+  }
+  @media (max-width: 768px) {
+    .section-head { grid-template-columns: 1fr; gap: 1.5rem; margin-bottom: 3rem; }
+  }
+  .section-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--gold);
+    text-transform: uppercase;
+    border-top: 1px solid var(--gold);
+    padding-top: 1rem;
+  }
+  .section-num span {
+    display: block;
+    color: var(--muted);
+    margin-top: 6px;
+    font-size: 9.5px;
+    line-height: 1.4;
+  }
+  h2.section-title {
+    font-family: var(--serif);
+    font-size: clamp(2rem, 4.8vw, 3.8rem);
+    font-weight: 250;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    max-width: 22ch;
+  }
+  h2.section-title em {
+    font-style: italic;
+    color: var(--gold);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .section-sub {
+    margin-top: 1.2rem;
+    color: var(--bone);
+    font-size: 1.05rem;
+    max-width: 60ch;
+    line-height: 1.55;
+  }
+
+  /* === STATS === */
+  .stats-bleed {
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--ink-2);
+    padding: 0;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    max-width: 1480px;
+    margin: 0 auto;
+  }
+  .stat {
+    padding: 3.5rem 2rem;
+    border-right: 1px solid var(--line);
+    position: relative;
+  }
+  .stat:last-child { border-right: none; }
+  @media (max-width: 768px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stat { border-bottom: 1px solid var(--line); padding: 2.4rem 1.4rem; }
+    .stat:nth-child(2) { border-right: none; }
+  }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .stat-label::before {
+    content: counter(stat-counter, decimal-leading-zero);
+    counter-increment: stat-counter;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--gold-2);
+    font-variation-settings: "opsz" 24, "SOFT" 100;
+  }
+  .stats { counter-reset: stat-counter; }
+  .stat-value {
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 5.2vw, 4rem);
+    font-weight: 200;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.8rem;
+    color: var(--paper);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .stat-value sup {
+    font-size: 0.42em;
+    color: var(--gold);
+    margin-left: 4px;
+    font-style: italic;
+    font-variation-settings: "opsz" 36, "SOFT" 100;
+  }
+  .stat-note {
+    font-size: 0.82rem;
+    color: var(--dust);
+    font-style: italic;
+    line-height: 1.45;
+    font-family: var(--serif);
+    font-variation-settings: "opsz" 14, "SOFT" 50;
+  }
+
+  /* === DUALITY === */
+  .duality {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--line);
+    background: var(--ink-2);
+  }
+  @media (max-width: 768px) { .duality { grid-template-columns: 1fr; } }
+  .duality-side {
+    padding: 3.5rem 3rem;
+    border-right: 1px solid var(--line);
+    position: relative;
+  }
+  .duality-side:last-child {
+    border-right: none;
+    background: linear-gradient(135deg, rgba(74,122,94,0.05) 0%, transparent 70%);
+  }
+  @media (max-width: 768px) {
+    .duality-side { border-right: none; border-bottom: 1px solid var(--line); padding: 2.2rem 1.4rem; }
+  }
+  .duality-tag {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.25em;
+    color: var(--rust);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .duality-side:last-child .duality-tag { color: var(--emerald); }
+  .duality-tag .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+  }
+  .duality-title {
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 250;
+    margin-bottom: 2rem;
+    font-style: italic;
+    line-height: 1.05;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    letter-spacing: -0.02em;
+  }
+  .duality-title strong {
+    font-style: normal;
+    font-weight: 250;
+    color: var(--gold);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .duality-list { list-style: none; counter-reset: dlist; }
+  .duality-list li {
+    padding: 1.1rem 0;
+    border-top: 1px solid var(--line-soft);
+    font-size: 0.97rem;
+    color: var(--bone);
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 1rem;
+    line-height: 1.55;
+  }
+  .duality-list li::before {
+    content: counter(dlist, decimal-leading-zero);
+    counter-increment: dlist;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--muted);
+    padding-top: 4px;
+    letter-spacing: 0.1em;
+  }
+
+  /* === HERO MINT FLOW SVG === */
+  .hero-svg-wrap {
+    width: 100%;
+    height: 240px;
+    position: relative;
+  }
+  .hero-svg-wrap svg { width: 100%; height: 100%; display: block; }
+
+  /* === PRODUCTS === */
+  .product-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: var(--ink-2);
+  }
+  .product-tabs::-webkit-scrollbar { display: none; }
+  .product-tab {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 1.6rem 1.8rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    position: relative;
+    border-right: 1px solid var(--line);
+  }
+  .product-tab:last-child { border-right: none; }
+  .product-tab:hover { color: var(--paper); background: var(--ink-3); }
+  .product-tab.active {
+    color: var(--gold);
+    border-bottom-color: var(--gold);
+    background: var(--ink);
+  }
+  .product-tab .num {
+    color: var(--muted-2);
+    margin-right: 0.7rem;
+    font-size: 9px;
+    font-style: italic;
+    font-family: var(--serif);
+    letter-spacing: 0;
+  }
+  .product-tab.active .num { color: var(--gold); }
+
+  .product-panel {
+    display: none;
+    padding: 4rem 3rem;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-top: none;
+    animation: fadeUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .product-panel.active { display: block; }
+  @media (max-width: 768px) { .product-panel { padding: 2.5rem 1.4rem; } }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .product-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 4.5rem;
+  }
+  @media (max-width: 1000px) { .product-grid { grid-template-columns: 1fr; gap: 3rem; } }
+
+  .product-tagline {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .product-tagline::before {
+    content: '';
+    width: 28px; height: 1px;
+    background: var(--gold);
+  }
+  .product-name {
+    font-family: var(--serif);
+    font-size: clamp(3rem, 7vw, 5.5rem);
+    font-weight: 200;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    margin-bottom: 0.6rem;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .product-name em {
+    color: var(--gold);
+    font-style: italic;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    font-weight: 250;
+  }
+  .product-glyph {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    color: var(--gold);
+    font-style: italic;
+    margin-bottom: 1.5rem;
+    font-variation-settings: "opsz" 24, "SOFT" 100;
+  }
+  .product-desc {
+    color: var(--bone);
+    font-size: 1.02rem;
+    line-height: 1.7;
+    margin-bottom: 1.8rem;
+  }
+  .product-desc strong {
+    color: var(--gold);
+    font-weight: 500;
+  }
+  .product-meta {
+    border-top: 1px solid var(--line);
+    margin-top: 1rem;
+  }
+  .product-meta-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    padding: 0.95rem 0;
+    border-bottom: 1px solid var(--line-soft);
+    align-items: baseline;
+    gap: 1rem;
+  }
+  .product-meta-row dt {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .product-meta-row dd {
+    color: var(--paper);
+    font-size: 0.93rem;
+    line-height: 1.5;
+  }
+  .product-meta-row dd strong { color: var(--gold); font-weight: 500; }
+
+  .product-side {
+    background: var(--ink);
+    padding: 2.5rem;
+    border: 1px solid var(--line);
+    position: relative;
+    align-self: start;
+  }
+  .product-side .corner-tl,
+  .product-side .corner-br {
+    content: '';
+    position: absolute;
+    width: 16px; height: 16px;
+    border: 1px solid var(--gold);
+  }
+  .product-side .corner-tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .product-side .corner-br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+  .side-stamp {
+    position: absolute;
+    top: 1.5rem; right: 1.5rem;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    padding: 4px 8px;
+    text-transform: uppercase;
+  }
+  .side-label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.25em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    padding-right: 100px;
+  }
+  .side-title {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    font-weight: 250;
+    font-style: italic;
+    margin-bottom: 1.2rem;
+    line-height: 1.2;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+  }
+  .side-text {
+    color: var(--bone);
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  .side-text code {
+    font-family: var(--mono);
+    color: var(--gold);
+    font-size: 0.85em;
+    background: var(--ink-2);
+    padding: 1px 6px;
+    border: 1px solid var(--line);
+  }
+
+  /* === MINT FLOW SVG DIAGRAM === */
+  .flow-control {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0;
+    flex-wrap: wrap;
+    align-items: stretch;
+    border: 1px solid var(--line);
+    border-bottom: none;
+    background: var(--ink-2);
+  }
+  .flow-toggle {
+    background: none;
+    border: none;
+    border-right: 1px solid var(--line);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 1.2rem 1.8rem;
+    cursor: pointer;
+    transition: all 0.25s;
+  }
+  .flow-toggle:hover { background: var(--ink-3); }
+  .flow-toggle.active {
+    background: var(--gold);
+    color: var(--ink);
+  }
+  .flow-play {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--muted);
+    letter-spacing: 0.18em;
+    align-self: center;
+    padding: 0 1.5rem;
+    text-transform: uppercase;
+  }
+  .flow-play kbd {
+    background: var(--ink);
+    border: 1px solid var(--line);
+    padding: 3px 7px;
+    font-family: var(--mono);
+    color: var(--gold);
+    font-size: 10px;
+    margin: 0 2px;
+  }
+
+  /* SVG schematic */
+  .flow-svg-container {
+    border: 1px solid var(--line);
+    background: var(--ink-2);
+    padding: 2rem 2rem 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .flow-svg-container::before {
+    content: 'FIG. 01 — CAPITAL FLOW SCHEMATIC';
+    position: absolute;
+    top: 1rem; left: 2rem;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+  }
+  .flow-svg-container::after {
+    content: 'ONDO FINANCE / OUSG · USDY';
+    position: absolute;
+    top: 1rem; right: 2rem;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+  }
+  .flow-svg {
+    width: 100%;
+    height: 380px;
+    display: block;
+    margin-top: 2rem;
+  }
+  @media (max-width: 768px) {
+    .flow-svg { height: 280px; }
+    .flow-svg-container { padding: 1.5rem 1rem; }
+  }
+
+  .flow-detail {
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-top: none;
+    padding: 3rem;
+    min-height: 240px;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 3rem;
+  }
+  @media (max-width: 900px) {
+    .flow-detail { grid-template-columns: 1fr; padding: 2rem 1.4rem; gap: 2rem; }
+  }
+  .flow-detail-main {}
+  .flow-step-num-big {
+    font-family: var(--serif);
+    font-size: 5rem;
+    font-style: italic;
+    color: var(--gold);
+    line-height: 1;
+    font-weight: 200;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    margin-bottom: -0.5rem;
+    letter-spacing: -0.05em;
+  }
+  .flow-detail-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+  }
+  .flow-detail-title {
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-style: italic;
+    font-weight: 250;
+    margin-bottom: 1.2rem;
+    color: var(--paper);
+    line-height: 1.05;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    letter-spacing: -0.02em;
+  }
+  .flow-detail-body {
+    color: var(--bone);
+    font-size: 1rem;
+    line-height: 1.7;
+    margin-bottom: 1.5rem;
+  }
+  .flow-step-prev-next {
+    display: flex;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .flow-step-prev-next button {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--paper);
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    transition: all 0.2s;
+  }
+  .flow-step-prev-next button:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+  .flow-detail-meta {
+    background: var(--ink);
+    padding: 1.8rem;
+    border: 1px dashed var(--line);
+    align-self: start;
+  }
+  .flow-detail-meta-row {
+    padding: 0.9rem 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .flow-detail-meta-row:last-child { border-bottom: none; }
+  .flow-detail-meta-row .l {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .flow-detail-meta-row .v {
+    font-family: var(--serif);
+    color: var(--paper);
+    font-size: 0.9rem;
+    font-variation-settings: "opsz" 14, "SOFT" 30;
+  }
+
+  /* === REBASING === */
+  .rebase-demo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--line);
+    background: var(--ink-2);
+  }
+  @media (max-width: 900px) { .rebase-demo { grid-template-columns: 1fr; } }
+  .rebase-side {
+    padding: 3rem 2.5rem;
+    border-right: 1px solid var(--line);
+    position: relative;
+  }
+  @media (max-width: 900px) { .rebase-side { border-right: none; border-bottom: 1px solid var(--line); padding: 2rem 1.4rem; } }
+  .rebase-side:last-child { border-right: none; }
+  .rebase-side::before {
+    content: attr(data-letter);
+    position: absolute;
+    top: 1.5rem; right: 2.5rem;
+    font-family: var(--serif);
+    font-size: 6rem;
+    color: var(--ink-3);
+    font-style: italic;
+    line-height: 1;
+    font-weight: 200;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    pointer-events: none;
+    user-select: none;
+  }
+  .rebase-mode {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.25em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+    position: relative; z-index: 1;
+  }
+  .rebase-name {
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 250;
+    margin-bottom: 0.8rem;
+    line-height: 1.05;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    letter-spacing: -0.02em;
+    position: relative; z-index: 1;
+  }
+  .rebase-name em {
+    color: var(--gold);
+    font-style: italic;
+  }
+  .rebase-mech {
+    color: var(--bone);
+    font-size: 0.93rem;
+    margin-bottom: 1.8rem;
+    line-height: 1.6;
+    position: relative; z-index: 1;
+  }
+  /* mini chart */
+  .rebase-chart {
+    height: 80px;
+    border: 1px solid var(--line);
+    background: var(--ink);
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .rebase-chart svg { width: 100%; height: 100%; }
+  .rebase-chart::after {
+    content: attr(data-label);
+    position: absolute;
+    top: 6px; left: 8px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .rebase-display {
+    background: var(--ink);
+    border: 1px solid var(--line);
+    padding: 1.5rem;
+    font-family: var(--mono);
+    margin-bottom: 1rem;
+  }
+  .rebase-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 11.5px;
+  }
+  .rebase-row:last-child { border-bottom: none; padding-top: 0.7rem; }
+  .rebase-row .lbl { color: var(--muted); letter-spacing: 0.15em; }
+  .rebase-row .val { color: var(--paper); font-weight: 500; }
+  .rebase-row.delta .val { color: var(--emerald); font-size: 13px; }
+  .rebase-tick {
+    background: none;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.2em;
+    padding: 0.8rem 1.3rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.25s;
+    width: 100%;
+  }
+  .rebase-tick:hover { background: var(--gold); color: var(--ink); }
+
+  /* === ARCHITECTURE === */
+  .arch-bleed {
+    background: var(--ink-2);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 0;
+  }
+  .arch-wrap {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 5rem 2.5rem;
+  }
+  @media (max-width: 768px) { .arch-wrap { padding: 3rem 1.4rem; } }
+  .arch {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 3rem;
+    margin-top: 3rem;
+  }
+  @media (max-width: 1000px) { .arch { grid-template-columns: 1fr; gap: 2rem; } }
+
+  .arch-svg-wrap {
+    border: 1px solid var(--line);
+    background: var(--ink);
+    padding: 2rem;
+    position: relative;
+    align-self: start;
+  }
+  .arch-svg-wrap::before {
+    content: 'FIG. 02 — ONDO CHAIN ARCHITECTURE';
+    position: absolute;
+    top: 1rem; left: 1.5rem;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+  }
+  .arch-svg-wrap::after {
+    content: 'COSMOSBFT · EVM · 1S FINALITY';
+    position: absolute;
+    top: 1rem; right: 1.5rem;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+  }
+  .arch-svg {
+    width: 100%;
+    height: 540px;
+    display: block;
+    margin-top: 2rem;
+  }
+  @media (max-width: 768px) { .arch-svg { height: 460px; } }
+
+  .arch-detail {
+    padding: 2.5rem;
+    background: var(--ink);
+    border: 1px solid var(--line);
+    align-self: start;
+    min-height: 540px;
+  }
+  .arch-detail-tag {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1.2rem;
+  }
+  .arch-detail-title {
+    font-family: var(--serif);
+    font-size: 1.9rem;
+    font-weight: 250;
+    margin-bottom: 1.2rem;
+    line-height: 1.1;
+    font-style: italic;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    letter-spacing: -0.02em;
+  }
+  .arch-detail-body {
+    color: var(--bone);
+    font-size: 0.97rem;
+    line-height: 1.7;
+    margin-bottom: 1.5rem;
+  }
+  .arch-bullets {
+    list-style: none;
+    border-top: 1px solid var(--line);
+    padding-top: 1.2rem;
+  }
+  .arch-bullets li {
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--bone);
+    font-size: 0.88rem;
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 0.8rem;
+    align-items: start;
+    line-height: 1.55;
+  }
+  .arch-bullets li::before {
+    content: '◆';
+    color: var(--gold);
+    font-size: 7px;
+    padding-top: 7px;
+  }
+
+  /* arch layer SVG buttons */
+  .arch-layer {
+    cursor: pointer;
+    transition: all 0.25s;
+  }
+  .arch-layer:hover .layer-bg { fill: var(--ink-3); }
+  .arch-layer.active .layer-bg { fill: rgba(201,169,97,0.08); stroke: var(--gold); }
+  .arch-layer.active .layer-stroke { stroke: var(--gold); }
+  .arch-layer.active text { fill: var(--gold); }
+
+  /* === PARTNERS === */
+  .partners-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border: 1px solid var(--line);
+    background: var(--ink-2);
+  }
+  @media (max-width: 900px) { .partners-grid { grid-template-columns: repeat(2, 1fr); } }
+  .partner {
+    padding: 2.2rem 1.6rem;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    transition: background 0.25s;
+    position: relative;
+  }
+  .partner:hover { background: var(--ink-3); }
+  .partner:nth-child(4n) { border-right: none; }
+  .partner:nth-last-child(-n+4):not(.is-not-last-row) { border-bottom: none; }
+  @media (max-width: 900px) {
+    .partner:nth-child(4n) { border-right: 1px solid var(--line); }
+    .partner:nth-child(2n) { border-right: none; }
+  }
+  .partner-num {
+    position: absolute;
+    top: 0.8rem; right: 1rem;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted-2);
+    letter-spacing: 0.15em;
+  }
+  .partner-cat {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    color: var(--gold);
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+  .partner-name {
+    font-family: var(--serif);
+    font-size: 1.3rem;
+    color: var(--paper);
+    margin-bottom: 0.4rem;
+    font-weight: 350;
+    font-variation-settings: "opsz" 36, "SOFT" 50;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+  .partner-role {
+    font-size: 0.83rem;
+    color: var(--muted);
+    line-height: 1.45;
+    font-style: italic;
+    font-family: var(--serif);
+    font-variation-settings: "opsz" 14, "SOFT" 50;
+  }
+
+  /* === CALCULATOR === */
+  .calc {
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  @media (max-width: 900px) { .calc { grid-template-columns: 1fr; } }
+  .calc-controls {
+    padding: 3rem 3rem;
+    border-right: 1px solid var(--line);
+  }
+  @media (max-width: 900px) { .calc-controls { padding: 2rem 1.4rem; border-right: none; border-bottom: 1px solid var(--line); } }
+  .calc-controls label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 1rem;
+  }
+  .calc-input {
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    font-family: var(--serif);
+    font-size: 2.4rem;
+    padding: 1rem 1.2rem;
+    width: 100%;
+    margin-bottom: 1.2rem;
+    font-weight: 250;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    letter-spacing: -0.02em;
+  }
+  .calc-input:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
+  .calc-slider {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 1px;
+    background: var(--line);
+    margin: 0.4rem 0 0.6rem;
+  }
+  .calc-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--gold);
+    border-radius: 0;
+    cursor: pointer;
+    border: 2px solid var(--ink);
+    transform: rotate(45deg);
+  }
+  .calc-slider::-moz-range-thumb {
+    width: 14px; height: 14px;
+    background: var(--gold);
+    border-radius: 0;
+    cursor: pointer;
+    border: 2px solid var(--ink);
+    transform: rotate(45deg);
+  }
+  .calc-product {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--line);
+  }
+  .calc-product button {
+    flex: 1;
+    background: none;
+    border: none;
+    border-right: 1px solid var(--line);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    padding: 0.85rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+  }
+  .calc-product button:last-child { border-right: none; }
+  .calc-product button.active {
+    background: var(--ink);
+    color: var(--gold);
+  }
+  .calc-output {
+    padding: 3rem;
+    background: var(--ink);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  @media (max-width: 900px) { .calc-output { padding: 2rem 1.4rem; } }
+  .calc-output::before {
+    content: 'PROJECTED · NOT ADVICE';
+    position: absolute;
+    top: 1.5rem; right: 2rem;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--muted-2);
+  }
+  .calc-output-label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.25em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+  }
+  .calc-output-val {
+    font-family: var(--serif);
+    font-size: clamp(3rem, 6vw, 5rem);
+    font-weight: 200;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    margin-bottom: 1.5rem;
+  }
+  .calc-output-val .sym {
+    color: var(--gold);
+    font-style: italic;
+    margin-right: 0.2rem;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .calc-curve {
+    width: 100%;
+    height: 100px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    margin: 0 0 1.5rem;
+    position: relative;
+  }
+  .calc-curve svg { width: 100%; height: 100%; }
+  .calc-curve::before {
+    content: 'GROWTH · COMPOUND DAILY';
+    position: absolute;
+    top: 6px; left: 8px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+  }
+  .calc-breakdown {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .calc-breakdown div {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.45rem 0;
+    border-bottom: 1px dashed var(--line-soft);
+    letter-spacing: 0.1em;
+  }
+  .calc-breakdown div:last-child { border-bottom: none; }
+  .calc-breakdown strong {
+    color: var(--paper);
+    font-weight: 500;
+    font-family: var(--serif);
+    letter-spacing: 0;
+    font-style: italic;
+    font-size: 13px;
+    font-variation-settings: "opsz" 14, "SOFT" 50;
+  }
+  .calc-disclaimer {
+    margin-top: 1.5rem;
+    font-size: 0.78rem;
+    color: var(--muted-2);
+    font-style: italic;
+    line-height: 1.5;
+    font-family: var(--serif);
+    font-variation-settings: "opsz" 14, "SOFT" 50;
+  }
+
+  /* === RISKS === */
+  .risks {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--line);
+  }
+  @media (max-width: 768px) { .risks { grid-template-columns: 1fr; } }
+  .risk {
+    padding: 3rem 2.5rem;
+    border-right: 1px solid var(--line);
+    background: var(--ink-2);
+    position: relative;
+  }
+  .risk:last-child { border-right: none; }
+  @media (max-width: 768px) {
+    .risk { border-right: none; border-bottom: 1px solid var(--line); padding: 2rem 1.4rem; }
+  }
+  .risk-num {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--rust);
+    font-size: 4rem;
+    line-height: 1;
+    margin-bottom: 1rem;
+    font-weight: 200;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    letter-spacing: -0.05em;
+  }
+  .risk-tag {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.25em;
+    color: var(--rust);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+  }
+  .risk-title {
+    font-family: var(--serif);
+    font-size: 1.4rem;
+    font-weight: 350;
+    margin-bottom: 1rem;
+    line-height: 1.2;
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+    letter-spacing: -0.01em;
+  }
+  .risk-body {
+    color: var(--bone);
+    font-size: 0.92rem;
+    line-height: 1.65;
+  }
+
+  /* === PULL QUOTE === */
+  .pullquote {
+    padding: 6rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+  .pullquote::before {
+    content: '"';
+    position: absolute;
+    top: 2rem; left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--serif);
+    font-size: 8rem;
+    color: var(--gold);
+    line-height: 1;
+    font-style: italic;
+    font-weight: 200;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    opacity: 0.4;
+  }
+  .pullquote-text {
+    font-family: var(--serif);
+    font-size: clamp(1.6rem, 3.5vw, 2.6rem);
+    font-weight: 250;
+    line-height: 1.25;
+    max-width: 22ch;
+    margin: 0 auto 2rem;
+    font-style: italic;
+    color: var(--paper);
+    font-variation-settings: "opsz" 144, "SOFT" 80;
+    letter-spacing: -0.02em;
+    position: relative;
+    z-index: 1;
+  }
+  .pullquote-text em {
+    color: var(--gold);
+    font-style: normal;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .pullquote-attr {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .pullquote-attr::before {
+    content: '— ';
+  }
+
+  /* === FOOTER === */
+  footer {
+    padding: 5rem 0 3rem;
+    border-bottom: none;
+    background: var(--ink);
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 4rem;
+    padding-bottom: 3rem;
+    border-bottom: 1px solid var(--line);
+  }
+  @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr; gap: 2rem; } }
+  .footer-mark {
+    font-family: var(--serif);
+    font-size: 1.6rem;
+    font-style: italic;
+    color: var(--gold);
+    margin-bottom: 1rem;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+    font-weight: 250;
+    line-height: 1.1;
+  }
+  .footer-text {
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    max-width: 480px;
+  }
+  .footer-meta {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--muted-2);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .footer-meta-title {
+    color: var(--gold);
+    margin-bottom: 1rem;
+  }
+  .footer-meta div { margin-bottom: 0.7rem; }
+  .footer-meta strong {
+    color: var(--paper);
+    display: block;
+    margin-top: 4px;
+    font-family: var(--serif);
+    letter-spacing: 0;
+    font-style: italic;
+    font-size: 13px;
+    text-transform: none;
+    font-weight: 400;
+    font-variation-settings: "opsz" 14, "SOFT" 50;
+  }
+  .footer-bottom {
+    padding-top: 2rem;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--muted-2);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+  }
+  .footer-fleur {
+    color: var(--gold);
+    font-size: 14px;
+    letter-spacing: 0.5em;
+  }
+
+  /* === REVEAL === */
+  .reveal { opacity: 0; transform: translateY(30px); transition: all 1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+
+  /* SVG common styles */
+  .schema-line { stroke: var(--gold); stroke-width: 0.8; fill: none; }
+  .schema-line-dashed { stroke: var(--muted); stroke-width: 0.6; fill: none; stroke-dasharray: 3 3; }
+  .schema-fill { fill: var(--ink); stroke: var(--line); stroke-width: 0.8; }
+  .schema-fill-active { fill: rgba(201,169,97,0.06); stroke: var(--gold); stroke-width: 1; }
+  .schema-text { font-family: var(--mono); font-size: 9px; fill: var(--paper); letter-spacing: 1.5px; text-transform: uppercase; }
+  .schema-text-muted { font-family: var(--mono); font-size: 8px; fill: var(--muted); letter-spacing: 1.2px; text-transform: uppercase; }
+  .schema-text-gold { font-family: var(--mono); font-size: 9px; fill: var(--gold); letter-spacing: 1.5px; text-transform: uppercase; }
+
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Path drawing animation */
+  .path-flow {
+    stroke-dasharray: 4 3;
+    animation: dashflow 1.5s linear infinite;
+  }
+  @keyframes dashflow {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: -14; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================ TICKER ================ -->
+<div class="ticker">
+  <div class="ticker-track">
+    <div class="ticker-item"><strong>ECOSYSTEM TVL</strong> <span class="up">$3.5B+</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>USDY APY</strong> <span class="accent">~5.30%</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>OUSG APY</strong> <span class="accent">~3.49%</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>USDY TVL</strong> <span class="up">$650M / 9 chains</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>OUSG TVL</strong> <span class="up">~$700M</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>OGM CUMULATIVE VOL.</strong> <span class="up">$6.8B</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>ONDO CHAIN</strong> <span class="accent">L1 / EVM / CosmosBFT</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>FOUNDED</strong> 2021 — NEW YORK<span class="div"></span></div>
+    <!-- duplicate -->
+    <div class="ticker-item"><strong>ECOSYSTEM TVL</strong> <span class="up">$3.5B+</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>USDY APY</strong> <span class="accent">~5.30%</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>OUSG APY</strong> <span class="accent">~3.49%</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>USDY TVL</strong> <span class="up">$650M / 9 chains</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>OUSG TVL</strong> <span class="up">~$700M</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>OGM CUMULATIVE VOL.</strong> <span class="up">$6.8B</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>ONDO CHAIN</strong> <span class="accent">L1 / EVM / CosmosBFT</span><span class="div"></span></div>
+    <div class="ticker-item"><strong>FOUNDED</strong> 2021 — NEW YORK<span class="div"></span></div>
+  </div>
+</div>
+
+<!-- ================ HERO ================ -->
+<header class="hero">
+  <div class="hero-watermark">$</div>
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">An Architectural Explainer · Volume I, 2026</div>
+        <h1 class="headline">
+          How Ondo Finance<br>
+          brings <em>Wall Street</em><br>
+          onto the <em>chain.</em>
+        </h1>
+        <p class="lede">
+          Ondo Finance is the largest tokenized real-world asset platform in crypto — converting U.S. Treasuries, money-market funds, and listed equities into permissioned, yield-bearing, programmable tokens that settle 24 hours a day across nine blockchains. What follows is the architecture behind it, drawn for an audience of banking technologists.
+        </p>
+        <div class="byline">
+          <div>Subject<strong>RWA Tokenization</strong></div>
+          <div>Coverage<strong>USDY · OUSG · OGM</strong></div>
+          <div>Reader<strong>Banking · Treasury · Architects</strong></div>
+          <div>Last Reviewed<strong>May 2026</strong></div>
+        </div>
+      </div>
+
+      <!-- Hero side schematic -->
+      <aside class="hero-side">
+        <span class="corner-tl"></span><span class="corner-br"></span>
+        <div class="schema-label">Specimen — Capital Translation</div>
+        <div class="hero-svg-wrap">
+          <svg viewBox="0 0 360 240" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+            <!-- Engraved frame -->
+            <rect x="6" y="6" width="348" height="228" fill="none" stroke="#2a2a35" stroke-width="0.5"/>
+            <rect x="10" y="10" width="340" height="220" fill="none" stroke="#2a2a35" stroke-width="0.3" stroke-dasharray="2 2"/>
+
+            <!-- Left: Treasury Note -->
+            <g transform="translate(30, 60)">
+              <rect width="100" height="120" fill="#111118" stroke="#c9a961" stroke-width="0.6"/>
+              <rect x="6" y="6" width="88" height="108" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1"/>
+              <text x="50" y="28" text-anchor="middle" class="schema-text-gold">U.S. TREASURY</text>
+              <text x="50" y="42" text-anchor="middle" class="schema-text-muted">SHORT-TERM BILL</text>
+              <line x1="20" y1="55" x2="80" y2="55" stroke="#c9a961" stroke-width="0.4"/>
+              <text x="50" y="80" text-anchor="middle" font-family="Fraunces" font-size="32" font-style="italic" font-weight="200" fill="#f1ead8" font-variation-settings="'opsz' 144, 'SOFT' 100">$</text>
+              <line x1="20" y1="95" x2="80" y2="95" stroke="#c9a961" stroke-width="0.4"/>
+              <text x="50" y="108" text-anchor="middle" class="schema-text-muted">YIELD 5.3%</text>
+            </g>
+
+            <!-- Arrow with TOKENIZE label -->
+            <g>
+              <path d="M 140 120 L 220 120" class="schema-line path-flow"/>
+              <polygon points="220,120 213,116 213,124" fill="#c9a961"/>
+              <text x="180" y="108" text-anchor="middle" class="schema-text-gold">TOKENIZE</text>
+              <text x="180" y="138" text-anchor="middle" class="schema-text-muted">MINT · 24/7</text>
+            </g>
+
+            <!-- Right: ERC-20 Token -->
+            <g transform="translate(230, 60)">
+              <rect width="100" height="120" fill="#111118" stroke="#c9a961" stroke-width="0.6" rx="4"/>
+              <rect x="6" y="6" width="88" height="108" fill="none" stroke="#c9a961" stroke-width="0.3" rx="2"/>
+              <text x="50" y="28" text-anchor="middle" class="schema-text-gold">USDY · OUSG</text>
+              <text x="50" y="42" text-anchor="middle" class="schema-text-muted">ERC-20 / SPL / XRPL</text>
+              <line x1="20" y1="55" x2="80" y2="55" stroke="#c9a961" stroke-width="0.4"/>
+              <text x="50" y="80" text-anchor="middle" font-family="Fraunces" font-size="14" font-style="italic" font-weight="200" fill="#f1ead8" font-variation-settings="'opsz' 144, 'SOFT' 100">⬡</text>
+              <line x1="20" y1="95" x2="80" y2="95" stroke="#c9a961" stroke-width="0.4"/>
+              <text x="50" y="108" text-anchor="middle" class="schema-text-muted">YIELD 5.3%</text>
+            </g>
+
+            <!-- Bottom marks -->
+            <text x="180" y="220" text-anchor="middle" class="schema-text-muted">SAME ASSET · NEW RAILS</text>
+          </svg>
+        </div>
+        <div class="schema-meta">
+          <div>SOURCE<strong>Tradfi Treasury</strong></div>
+          <div>OUTPUT<strong>Onchain Token</strong></div>
+          <div>SETTLEMENT<strong>Continuous</strong></div>
+          <div>SUPPLY<strong>~$1.4B</strong></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</header>
+
+<!-- ================ STATS ================ -->
+<section class="stats-bleed" style="padding: 0;">
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Ecosystem TVL</div>
+      <div class="stat-value">$3.5<sup>B</sup></div>
+      <div class="stat-note">across all Ondo products, Q2 2026</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Tokenized Treasuries</div>
+      <div class="stat-value">$1.4<sup>B</sup></div>
+      <div class="stat-note">USDY + OUSG combined</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Chains Supported</div>
+      <div class="stat-value">9<sup>+</sup></div>
+      <div class="stat-note">Eth · Solana · XRPL · Stellar · Polygon · Mantle · Sui · Aptos · Base</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">OGM Volume (cum.)</div>
+      <div class="stat-value">$6.8<sup>B</sup></div>
+      <div class="stat-note">since launch, September 2025</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ THE PREMISE ================ -->
+<section>
+  <div class="sec-marker">I</div>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-num">§ 01<span>The Premise</span></div>
+      <div>
+        <h2 class="section-title">Treasuries are the safest yield on earth — but the <em>rails</em> are stuck in 1975.</h2>
+        <p class="section-sub">The asset is excellent. The infrastructure around it — bank holidays, T+2, accreditation gates, opaque custody — was designed for a world that no longer exists.</p>
+      </div>
+    </div>
+    <div class="duality">
+      <div class="duality-side">
+        <div class="duality-tag"><span class="dot"></span>What Wall Street still ships</div>
+        <h3 class="duality-title">Settlement, <strong>1975 vintage</strong></h3>
+        <ol class="duality-list">
+          <li>Markets close at 4 p.m. ET. Treasuries do not trade nights, weekends, or holidays.</li>
+          <li>T+1 / T+2 settlement. Capital is locked in transit while paperwork clears.</li>
+          <li>Account minimums, accreditation gates, and brokers stand between most of the world and a 5% risk-free rate.</li>
+          <li>Holdings sit in custodial silos — they cannot be programmed, composed, or pledged across systems.</li>
+          <li>Cross-border distribution requires a chain of correspondent banks, each adding fee and delay.</li>
+        </ol>
+      </div>
+      <div class="duality-side">
+        <div class="duality-tag"><span class="dot"></span>The Ondo Thesis</div>
+        <h3 class="duality-title">Same yield, <strong>new rails</strong></h3>
+        <ol class="duality-list">
+          <li>Tokens trade 24/7/365 on public blockchains, with daily yield accrual built into the contract.</li>
+          <li>Mint and redeem are instant against USDC at the smart-contract level, with no broker in the middle.</li>
+          <li>$5,000 minimum, KYC/AML at issuance, then free transfer between approved holders.</li>
+          <li>Tokens are composable: collateral in DeFi, settlement on cross-border rails, treasury reserves for DAOs.</li>
+          <li>Issuance is regulator-aware — Reg D / Reg S / 3(c)(7) wrappers, with custody at BlackRock, Coinbase, Fireblocks.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ PULLQUOTE ================ -->
+<section class="pullquote" style="padding-top: 6rem; padding-bottom: 6rem;">
+  <div class="container">
+    <p class="pullquote-text">A money-market fund <em>as an ERC-20</em> — and the boring magic is that nothing about the underlying changes.</p>
+    <p class="pullquote-attr">The architectural insight</p>
+  </div>
+</section>
+
+<!-- ================ PRODUCTS ================ -->
+<section>
+  <div class="sec-marker">II</div>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-num">§ 02<span>Product Stack</span></div>
+      <div>
+        <h2 class="section-title">Five products, <em>one thesis</em>: bring institutional finance on-chain without breaking it.</h2>
+      </div>
+    </div>
+
+    <div class="product-tabs" id="productTabs">
+      <button class="product-tab active" data-product="usdy"><span class="num">i</span>USDY</button>
+      <button class="product-tab" data-product="ousg"><span class="num">ii</span>OUSG</button>
+      <button class="product-tab" data-product="ogm"><span class="num">iii</span>Global Markets</button>
+      <button class="product-tab" data-product="flux"><span class="num">iv</span>Flux Finance</button>
+      <button class="product-tab" data-product="chain"><span class="num">v</span>Ondo Chain</button>
+    </div>
+
+    <!-- USDY -->
+    <div class="product-panel active" data-product="usdy">
+      <div class="product-grid">
+        <div>
+          <div class="product-tagline">U.S. Dollar Yield Token · Non-U.S.</div>
+          <h3 class="product-name">USD<em>Y</em></h3>
+          <div class="product-glyph">— a productive dollar —</div>
+          <p class="product-desc">A yield-bearing token backed by short-term U.S. Treasuries and bank demand deposits, structured for non-U.S. retail and institutional holders. Legally, USDY is interest-bearing tokenized debt — not a stablecoin — so the price drifts upward as Treasury interest accrues into the underlying portfolio.</p>
+          <p class="product-desc">USDY ships in two flavours: <strong>USDY</strong> (accumulating — price rises) and <strong>rUSDY</strong> (rebasing — balance grows daily, price stays at $1). The wrapper contract converts between them on demand.</p>
+          <dl class="product-meta">
+            <div class="product-meta-row"><dt>Eligibility</dt><dd>Non-U.S. persons; KYC/AML; 40–50 day restricted period</dd></div>
+            <div class="product-meta-row"><dt>Yield</dt><dd><strong>~5.30% APY</strong> · Updated each business day</dd></div>
+            <div class="product-meta-row"><dt>Backing</dt><dd>Short-term U.S. Treasuries + bank demand deposits</dd></div>
+            <div class="product-meta-row"><dt>TVL</dt><dd><strong>$650M+</strong> across 9 blockchains</dd></div>
+            <div class="product-meta-row"><dt>Subscription</dt><dd>USDC on Ethereum, or USD wire ≥$100K</dd></div>
+            <div class="product-meta-row"><dt>Legal Wrapper</dt><dd>Reg S — Tokenized debt instrument (Ondo USDY LLC)</dd></div>
+          </dl>
+        </div>
+        <aside class="product-side">
+          <span class="corner-tl"></span><span class="corner-br"></span>
+          <span class="side-stamp">Note · 01</span>
+          <div class="side-label">Architect's Note</div>
+          <h4 class="side-title">A "yield stablecoin" in everything but legal classification</h4>
+          <p class="side-text">USDY is the closest the market has come to a productive dollar — it behaves like USDC but accrues T-bill yield natively. For a bank treasury exploring tokenized cash, USDY is the reference design: collateral-eligible, transfer-restricted, audited, and with a clean legal wrapper (Reg S debt instrument) that maps to existing fixed-income desks. The 40-day restricted period mirrors a Reg S distribution compliance period, not a technical limitation.</p>
+        </aside>
+      </div>
+    </div>
+
+    <!-- OUSG -->
+    <div class="product-panel" data-product="ousg">
+      <div class="product-grid">
+        <div>
+          <div class="product-tagline">Ondo Short-Term U.S. Gov. Treasuries · Qualified U.S.</div>
+          <h3 class="product-name">O<em>USG</em></h3>
+          <div class="product-glyph">— a wrapper around the wrappers —</div>
+          <p class="product-desc">A tokenized fund providing exposure to short-term U.S. Treasuries through institutional money-market vehicles — primarily BlackRock's BUIDL, alongside Franklin Templeton's BENJI, Fidelity, WisdomTree, and Wellington. OUSG is the gold standard for U.S.-qualified on-chain treasury management.</p>
+          <p class="product-desc">Like USDY, OUSG comes in accumulating and rebasing forms (<strong>OUSG</strong> / <strong>rOUSG</strong>). Mint and redeem are instant via USDC or PYUSD, 24/7, against the daily-published Net Asset Value.</p>
+          <dl class="product-meta">
+            <div class="product-meta-row"><dt>Eligibility</dt><dd>Qualified Purchasers (U.S.) — Reg D 506(c)</dd></div>
+            <div class="product-meta-row"><dt>Yield</dt><dd><strong>~3.49% APY</strong> · Net of fees</dd></div>
+            <div class="product-meta-row"><dt>Minimum</dt><dd>$5,000 instant mint / redeem</dd></div>
+            <div class="product-meta-row"><dt>Fees</dt><dd>0% mint/redeem · 0.15% mgmt (waived to Jul 2026)</dd></div>
+            <div class="product-meta-row"><dt>Underlying</dt><dd>BlackRock BUIDL, Franklin BENJI, Fidelity, WisdomTree</dd></div>
+            <div class="product-meta-row"><dt>Chains</dt><dd>Ethereum, Polygon, Solana, XRPL</dd></div>
+          </dl>
+        </div>
+        <aside class="product-side">
+          <span class="corner-tl"></span><span class="corner-br"></span>
+          <span class="side-stamp">Note · 02</span>
+          <div class="side-label">Architect's Note</div>
+          <h4 class="side-title">A wrapper around the wrappers</h4>
+          <p class="side-text">OUSG is technically a fund-of-funds: it holds shares in BUIDL (which itself holds Treasuries), plus USDC and bank deposits as a liquidity buffer to honour 24/7 redemptions. The clever part is the NAV oracle — the smart contract publishes a per-token NAV daily, and mint/redeem math is just <code>USDC ÷ NAV</code>. No order book, no slippage, no counterparty matching. For a bank balance sheet, this is "money market fund as ERC-20."</p>
+        </aside>
+      </div>
+    </div>
+
+    <!-- OGM -->
+    <div class="product-panel" data-product="ogm">
+      <div class="product-grid">
+        <div>
+          <div class="product-tagline">Tokenized Equities &amp; ETFs · Launched Sep 2025</div>
+          <h3 class="product-name">Global<em>Markets</em></h3>
+          <div class="product-glyph">— the broker-dealer is the moat —</div>
+          <p class="product-desc">The world's largest tokenized securities platform — over 200 tokenized U.S. stocks and ETFs on Ethereum and Solana, with trades settled against NASDAQ and NYSE liquidity. Sector ETFs, leveraged products, commodity-linked funds, and equity perpetuals all available as on-chain instruments.</p>
+          <p class="product-desc">In April 2026 OGM added Day-1 IPO access and equity perps, removing the last meaningful gap between traditional brokerage and on-chain trading.</p>
+          <dl class="product-meta">
+            <div class="product-meta-row"><dt>Cumulative Volume</dt><dd><strong>$6.8B+</strong> since launch</dd></div>
+            <div class="product-meta-row"><dt>Current TVL</dt><dd>$460M+</dd></div>
+            <div class="product-meta-row"><dt>Coverage</dt><dd>200+ stocks &amp; ETFs · Day-1 IPOs · perpetuals</dd></div>
+            <div class="product-meta-row"><dt>Settlement</dt><dd>Against NASDAQ / NYSE liquidity, near-zero slippage</dd></div>
+            <div class="product-meta-row"><dt>Acquisition</dt><dd>Oasis Pro Markets — SEC-registered broker-dealer</dd></div>
+            <div class="product-meta-row"><dt>Chains</dt><dd>Ethereum, Solana</dd></div>
+          </dl>
+        </div>
+        <aside class="product-side">
+          <span class="corner-tl"></span><span class="corner-br"></span>
+          <span class="side-stamp">Note · 03</span>
+          <div class="side-label">Architect's Note</div>
+          <h4 class="side-title">Where the regulatory moat lives</h4>
+          <p class="side-text">OGM only became viable after Ondo acquired Oasis Pro Markets — an SEC-registered broker-dealer, ATS, and transfer agent. The architecture is "tokens minted against custodied positions held by a regulated broker." For banks evaluating tokenized securities issuance, the takeaway is that the technical primitives are now commodity; the moat is the broker-dealer license, the Reg ATS approval, and the transfer-agent appointment that allows direct on-chain registration of beneficial ownership.</p>
+        </aside>
+      </div>
+    </div>
+
+    <!-- FLUX -->
+    <div class="product-panel" data-product="flux">
+      <div class="product-grid">
+        <div>
+          <div class="product-tagline">DeFi Lending Protocol · Compound v2 Fork</div>
+          <h3 class="product-name">Flux<em> Finance</em></h3>
+          <div class="product-glyph">— borrow without unwinding —</div>
+          <p class="product-desc">A peer-to-pool lending protocol governed by the Ondo DAO and built on a fork of Compound v2. Flux's distinguishing feature: it supports <strong>permissioned</strong> RWA collateral (OUSG, USDY) alongside open-access assets like USDC, DAI, FRAX, and USDT — letting Treasury holders borrow stablecoins without unwinding their yield position.</p>
+          <p class="product-desc">For institutional users this is capital efficiency unavailable in TradFi: earn ~5% on Treasuries while simultaneously using them as collateral to borrow operating capital at the prevailing DeFi rate.</p>
+          <dl class="product-meta">
+            <div class="product-meta-row"><dt>Architecture</dt><dd>Compound v2 fork with permissioned-asset support</dd></div>
+            <div class="product-meta-row"><dt>Permissioned Collateral</dt><dd>OUSG, USDY (KYC-gated)</dd></div>
+            <div class="product-meta-row"><dt>Open Markets</dt><dd>USDC, DAI, FRAX, USDT</dd></div>
+            <div class="product-meta-row"><dt>Governance</dt><dd>Ondo DAO via the ONDO token</dd></div>
+            <div class="product-meta-row"><dt>Use Case</dt><dd>Borrow stables against Treasury yield without unwind</dd></div>
+          </dl>
+        </div>
+        <aside class="product-side">
+          <span class="corner-tl"></span><span class="corner-br"></span>
+          <span class="side-stamp">Note · 04</span>
+          <div class="side-label">Architect's Note</div>
+          <h4 class="side-title">The first lending protocol that respects KYC at the contract level</h4>
+          <p class="side-text">Flux solved a problem most DeFi forks hand-wave: how do you list a transfer-restricted token in an open lending pool? The answer is per-asset eligibility checks at the cToken level, allow-listed against the same registry that gates USDY transfers. This is the design pattern banks should copy when extending an existing lending stack to RWAs — keep the AMM/pool math, swap the transfer hook.</p>
+        </aside>
+      </div>
+    </div>
+
+    <!-- CHAIN -->
+    <div class="product-panel" data-product="chain">
+      <div class="product-grid">
+        <div>
+          <div class="product-tagline">L1 Blockchain · Cosmos SDK + EVM · Live Nov 2025</div>
+          <h3 class="product-name">Ondo<em> Chain</em></h3>
+          <div class="product-glyph">— compliance at the consensus layer —</div>
+          <p class="product-desc">A purpose-built Layer-1 designed around a single conviction: tokenized real-world assets need infrastructure that is institutionally compliant by default, not bolted on. Built on the Cosmos SDK with EVM compatibility (CometBFT consensus, sub-second finality) — keeping every Solidity contract and Foundry tool that Ethereum developers already know.</p>
+          <p class="product-desc">The novel parts live below the application layer: <strong>enshrined oracles</strong> built into consensus, <strong>on-chain proof of reserves</strong>, <strong>permissioned validators</strong> drawn from regulated financial institutions, and <strong>RWA-backed staking</strong> where validators secure the network with tokenized Treasuries instead of a volatile native token.</p>
+          <dl class="product-meta">
+            <div class="product-meta-row"><dt>Stack</dt><dd>Cosmos SDK · CometBFT · EVM-compatible</dd></div>
+            <div class="product-meta-row"><dt>Validator Model</dt><dd>Permissioned — regulated FIs only (MEV-resistant)</dd></div>
+            <div class="product-meta-row"><dt>Staking Asset</dt><dd>Tokenized RWAs &amp; high-quality liquid assets</dd></div>
+            <div class="product-meta-row"><dt>Bridging</dt><dd>Native omnichain via LayerZero DVN architecture</dd></div>
+            <div class="product-meta-row"><dt>Advisors</dt><dd>BlackRock, Franklin, WisdomTree, McKinsey, Google Cloud, Morgan Stanley</dd></div>
+          </dl>
+        </div>
+        <aside class="product-side">
+          <span class="corner-tl"></span><span class="corner-br"></span>
+          <span class="side-stamp">Note · 05</span>
+          <div class="side-label">Architect's Note</div>
+          <h4 class="side-title">A permissioned validator set on a public chain — and that is the point.</h4>
+          <p class="side-text">Ondo Chain is the first credible answer to "what would a bank-run Layer-1 actually look like?" The validator set is closed (so no MEV from anonymous parties, no front-running of tokenized equity orders), but the chain itself is public and the data is open. RWA-backed staking is the most interesting primitive here — it removes the speculative-token tail-risk from validator economics. For KBTG-grade infrastructure planning, this is the design language to study, even if the chain you ship is private.</p>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ MINT FLOW (with SVG schematic) ================ -->
+<section>
+  <div class="sec-marker">III</div>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-num">§ 03<span>Capital Flow</span></div>
+      <div>
+        <h2 class="section-title">From wire transfer to wallet, in <em>six steps</em>.</h2>
+        <p class="section-sub">A schematic of the mint and redeem mechanics. Click any node, or step through with arrow keys.</p>
+      </div>
+    </div>
+
+    <div class="flow-control">
+      <button class="flow-toggle active" data-flow="mint">↓ Mint Flow</button>
+      <button class="flow-toggle" data-flow="redeem">↑ Redeem Flow</button>
+      <span class="flow-play">Click any node · or press <kbd>←</kbd><kbd>→</kbd></span>
+    </div>
+
+    <div class="flow-svg-container">
+      <svg class="flow-svg" id="flowSvg" viewBox="0 0 1200 380" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <!-- Engraved frame -->
+        <rect x="2" y="2" width="1196" height="376" fill="none" stroke="#2a2a35" stroke-width="0.5"/>
+        <rect x="6" y="6" width="1188" height="368" fill="none" stroke="#2a2a35" stroke-width="0.3" stroke-dasharray="3 3"/>
+
+        <!-- Horizontal guide line -->
+        <line x1="80" y1="190" x2="1120" y2="190" stroke="#2a2a35" stroke-width="0.4" stroke-dasharray="2 4"/>
+
+        <!-- 6 step nodes - each is a clickable group -->
+        <!-- Step 1 -->
+        <g class="flow-node" data-step="0" style="cursor: pointer;">
+          <circle cx="120" cy="190" r="36" class="node-bg" fill="#111118" stroke="#c9a961" stroke-width="1"/>
+          <circle cx="120" cy="190" r="32" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1"/>
+          <text x="120" y="186" text-anchor="middle" font-family="Fraunces" font-size="14" font-style="italic" font-weight="200" fill="#c9a961" font-variation-settings="'opsz' 144, 'SOFT' 100">i</text>
+          <text x="120" y="202" text-anchor="middle" class="schema-text-muted" style="font-size:7px; letter-spacing:1px;">USER</text>
+          <text x="120" y="245" text-anchor="middle" class="schema-text">ONBOARD</text>
+          <text x="120" y="258" text-anchor="middle" class="schema-text-muted">KYC · ALLOW-LIST</text>
+        </g>
+
+        <!-- Connector 1-2 -->
+        <g class="flow-conn" data-conn="0">
+          <path d="M 156 190 L 264 190" class="schema-line"/>
+          <polygon points="264,190 257,186 257,194" fill="#c9a961"/>
+          <text x="210" y="178" text-anchor="middle" class="schema-text-muted">USDC →</text>
+        </g>
+
+        <!-- Step 2 -->
+        <g class="flow-node" data-step="1" style="cursor: pointer;">
+          <rect x="270" y="158" width="80" height="64" class="node-bg" fill="#111118" stroke="#c9a961" stroke-width="1"/>
+          <rect x="274" y="162" width="72" height="56" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1"/>
+          <text x="310" y="186" text-anchor="middle" font-family="Fraunces" font-size="14" font-style="italic" font-weight="200" fill="#c9a961" font-variation-settings="'opsz' 144, 'SOFT' 100">ii</text>
+          <text x="310" y="204" text-anchor="middle" class="schema-text-muted" style="font-size:7px; letter-spacing:1px;">DEPOSIT</text>
+          <text x="310" y="245" text-anchor="middle" class="schema-text">SUBSCRIBE()</text>
+          <text x="310" y="258" text-anchor="middle" class="schema-text-muted">USDC · PYUSD</text>
+        </g>
+
+        <!-- Connector 2-3 -->
+        <g class="flow-conn" data-conn="1">
+          <path d="M 350 190 L 458 190" class="schema-line"/>
+          <polygon points="458,190 451,186 451,194" fill="#c9a961"/>
+        </g>
+
+        <!-- Step 3 -->
+        <g class="flow-node" data-step="2" style="cursor: pointer;">
+          <polygon points="500,158 540,170 540,210 500,222 460,210 460,170" class="node-bg" fill="#111118" stroke="#c9a961" stroke-width="1"/>
+          <polygon points="500,162 536,172 536,208 500,218 464,208 464,172" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1"/>
+          <text x="500" y="186" text-anchor="middle" font-family="Fraunces" font-size="14" font-style="italic" font-weight="200" fill="#c9a961" font-variation-settings="'opsz' 144, 'SOFT' 100">iii</text>
+          <text x="500" y="204" text-anchor="middle" class="schema-text-muted" style="font-size:7px; letter-spacing:1px;">CONTRACT</text>
+          <text x="500" y="245" text-anchor="middle" class="schema-text">SMART CONTRACT</text>
+          <text x="500" y="258" text-anchor="middle" class="schema-text-muted">NAV ORACLE · MINT</text>
+        </g>
+
+        <!-- Connector 3-4 -->
+        <g class="flow-conn" data-conn="2">
+          <path d="M 540 190 L 658 190" class="schema-line"/>
+          <polygon points="658,190 651,186 651,194" fill="#c9a961"/>
+          <text x="600" y="178" text-anchor="middle" class="schema-text-muted">OFF-CHAIN</text>
+        </g>
+
+        <!-- Step 4 -->
+        <g class="flow-node" data-step="3" style="cursor: pointer;">
+          <rect x="660" y="158" width="80" height="64" class="node-bg" fill="#111118" stroke="#c9a961" stroke-width="1"/>
+          <rect x="664" y="162" width="72" height="56" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1"/>
+          <text x="700" y="186" text-anchor="middle" font-family="Fraunces" font-size="14" font-style="italic" font-weight="200" fill="#c9a961" font-variation-settings="'opsz' 144, 'SOFT' 100">iv</text>
+          <text x="700" y="204" text-anchor="middle" class="schema-text-muted" style="font-size:7px; letter-spacing:1px;">CUSTODY</text>
+          <text x="700" y="245" text-anchor="middle" class="schema-text">COINBASE PRIME</text>
+          <text x="700" y="258" text-anchor="middle" class="schema-text-muted">USDC ⇌ USD</text>
+        </g>
+
+        <!-- Connector 4-5 -->
+        <g class="flow-conn" data-conn="3">
+          <path d="M 740 190 L 848 190" class="schema-line"/>
+          <polygon points="848,190 841,186 841,194" fill="#c9a961"/>
+          <text x="794" y="178" text-anchor="middle" class="schema-text-muted">USD →</text>
+        </g>
+
+        <!-- Step 5 -->
+        <g class="flow-node" data-step="4" style="cursor: pointer;">
+          <rect x="850" y="148" width="100" height="84" class="node-bg" fill="#111118" stroke="#c9a961" stroke-width="1"/>
+          <rect x="854" y="152" width="92" height="76" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1"/>
+          <line x1="864" y1="170" x2="936" y2="170" stroke="#c9a961" stroke-width="0.3"/>
+          <line x1="864" y1="180" x2="936" y2="180" stroke="#c9a961" stroke-width="0.3"/>
+          <line x1="864" y1="210" x2="936" y2="210" stroke="#c9a961" stroke-width="0.3"/>
+          <line x1="864" y1="220" x2="936" y2="220" stroke="#c9a961" stroke-width="0.3"/>
+          <text x="900" y="198" text-anchor="middle" font-family="Fraunces" font-size="14" font-style="italic" font-weight="200" fill="#c9a961" font-variation-settings="'opsz' 144, 'SOFT' 100">v</text>
+          <text x="900" y="255" text-anchor="middle" class="schema-text">BUIDL · TREASURY</text>
+          <text x="900" y="268" text-anchor="middle" class="schema-text-muted">SHORT-TERM T-BILLS</text>
+        </g>
+
+        <!-- Connector 5-6 (curves back) -->
+        <g class="flow-conn" data-conn="4">
+          <path d="M 950 190 Q 1020 190 1020 130 Q 1020 90 950 90 L 270 90 Q 156 90 156 150" class="schema-line-dashed"/>
+          <polygon points="156,150 152,143 160,143" fill="#7d7560"/>
+          <text x="600" y="78" text-anchor="middle" class="schema-text-muted">YIELD ACCRUES INTO NAV → TOKEN BACK TO USER</text>
+        </g>
+
+        <!-- Step 6 (token issued back to user) -->
+        <g class="flow-node" data-step="5" style="cursor: pointer;">
+          <rect x="1040" y="158" width="80" height="64" class="node-bg" fill="#111118" stroke="#c9a961" stroke-width="1" rx="3"/>
+          <rect x="1044" y="162" width="72" height="56" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1" rx="2"/>
+          <text x="1080" y="186" text-anchor="middle" font-family="Fraunces" font-size="14" font-style="italic" font-weight="200" fill="#c9a961" font-variation-settings="'opsz' 144, 'SOFT' 100">vi</text>
+          <text x="1080" y="204" text-anchor="middle" class="schema-text-muted" style="font-size:7px; letter-spacing:1px;">TOKEN</text>
+          <text x="1080" y="245" text-anchor="middle" class="schema-text">USDY · OUSG</text>
+          <text x="1080" y="258" text-anchor="middle" class="schema-text-muted">YIELD-BEARING</text>
+        </g>
+
+        <!-- Lower scale labels -->
+        <text x="120" y="320" text-anchor="middle" class="schema-text-muted">T+0</text>
+        <text x="310" y="320" text-anchor="middle" class="schema-text-muted">T+0</text>
+        <text x="500" y="320" text-anchor="middle" class="schema-text-muted">T+0 · ATOMIC</text>
+        <text x="700" y="320" text-anchor="middle" class="schema-text-muted">T+1</text>
+        <text x="900" y="320" text-anchor="middle" class="schema-text-muted">T+1 / T+2</text>
+        <text x="1080" y="320" text-anchor="middle" class="schema-text-muted">CONTINUOUS</text>
+
+        <line x1="120" y1="335" x2="1080" y2="335" stroke="#2a2a35" stroke-width="0.3"/>
+        <text x="600" y="358" text-anchor="middle" class="schema-text-muted" style="letter-spacing:3px;">SETTLEMENT TIMELINE — INSTANT MINT, ASYNCHRONOUS BACKEND</text>
+      </svg>
+    </div>
+
+    <div class="flow-detail" id="flowDetail">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ================ REBASING ================ -->
+<section>
+  <div class="sec-marker">IV</div>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-num">§ 04<span>Yield Mechanics</span></div>
+      <div>
+        <h2 class="section-title">Two ways to <em>pay yield</em> in tokens. Pick your accounting model.</h2>
+        <p class="section-sub">Click "Apply Yield" to advance one business day in both models simultaneously. Watch which dimension grows.</p>
+      </div>
+    </div>
+
+    <div class="rebase-demo">
+      <div class="rebase-side" data-letter="A">
+        <div class="rebase-mode">Accumulating · OUSG / USDY</div>
+        <h3 class="rebase-name">Token <em>price</em> rises</h3>
+        <p class="rebase-mech">Your wallet shows a fixed token count. Each business day, the contract publishes a new NAV reflecting accrued Treasury yield. Your dollar value grows because each token is worth more.</p>
+        <div class="rebase-chart" data-label="PRICE PER TOKEN">
+          <svg viewBox="0 0 300 80" preserveAspectRatio="none"><polyline id="accumChart" fill="none" stroke="#c9a961" stroke-width="1.2" points="0,75"/></svg>
+        </div>
+        <div class="rebase-display">
+          <div class="rebase-row"><span class="lbl">DAY</span><span class="val" id="accumDay">0</span></div>
+          <div class="rebase-row"><span class="lbl">BALANCE</span><span class="val" id="accumBal">100.0000</span></div>
+          <div class="rebase-row"><span class="lbl">PRICE / TOKEN</span><span class="val" id="accumPrice">$1.0000</span></div>
+          <div class="rebase-row delta"><span class="lbl">USD VALUE</span><span class="val" id="accumUsd">$100.00</span></div>
+        </div>
+        <button class="rebase-tick" onclick="tickRebase()">+1 Day · Apply Yield →</button>
+      </div>
+      <div class="rebase-side" data-letter="B">
+        <div class="rebase-mode">Rebasing · rOUSG / rUSDY</div>
+        <h3 class="rebase-name">Token <em>balance</em> grows</h3>
+        <p class="rebase-mech">Price is anchored at $1.00 like a stablecoin. Yield arrives as fresh tokens minted directly into your wallet each business day, proportional to your existing balance. Whoever holds at the rebase moment receives the yield.</p>
+        <div class="rebase-chart" data-label="BALANCE">
+          <svg viewBox="0 0 300 80" preserveAspectRatio="none"><polyline id="rebaseChart" fill="none" stroke="#4a7a5e" stroke-width="1.2" points="0,75"/></svg>
+        </div>
+        <div class="rebase-display">
+          <div class="rebase-row"><span class="lbl">DAY</span><span class="val" id="rebaseDay">0</span></div>
+          <div class="rebase-row"><span class="lbl">BALANCE</span><span class="val" id="rebaseBal">100.0000</span></div>
+          <div class="rebase-row"><span class="lbl">PRICE / TOKEN</span><span class="val" id="rebasePrice">$1.0000</span></div>
+          <div class="rebase-row delta"><span class="lbl">USD VALUE</span><span class="val" id="rebaseUsd">$100.00</span></div>
+        </div>
+        <button class="rebase-tick" onclick="resetRebase()">↺ Reset Simulation</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ ARCHITECTURE ================ -->
+<section class="arch-bleed" style="padding:0;">
+  <div class="sec-marker">V</div>
+  <div class="arch-wrap">
+    <div class="section-head" style="margin-bottom: 2rem;">
+      <div class="section-num">§ 05<span>Ondo Chain</span></div>
+      <div>
+        <h2 class="section-title">An L1 designed for <em>compliance at the consensus layer</em>.</h2>
+        <p class="section-sub">A purpose-built Layer-1 with seven layers of institutional finance baked into block production itself. Tap any layer to read the design rationale.</p>
+      </div>
+    </div>
+
+    <div class="arch">
+      <!-- SVG architecture diagram -->
+      <div class="arch-svg-wrap">
+        <svg class="arch-svg" id="archSvg" viewBox="0 0 500 540" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+          <!-- Frame -->
+          <rect x="2" y="2" width="496" height="536" fill="none" stroke="#2a2a35" stroke-width="0.5"/>
+
+          <!-- Stack of layers -->
+          <!-- L7 Application -->
+          <g class="arch-layer active" data-layer="0">
+            <rect class="layer-bg" x="80" y="40" width="340" height="48" fill="rgba(201,169,97,0.06)" stroke="#c9a961" stroke-width="1"/>
+            <rect x="84" y="44" width="332" height="40" fill="none" stroke="#c9a961" stroke-width="0.3" stroke-dasharray="1 1"/>
+            <text x="100" y="68" font-family="Fraunces" font-size="11" font-style="italic" fill="#c9a961" font-variation-settings="'opsz' 24, 'SOFT' 100">L7</text>
+            <text x="130" y="68" class="schema-text" fill="#c9a961">APPLICATION</text>
+            <text x="400" y="68" text-anchor="end" class="schema-text-muted">EVM CONTRACTS</text>
+          </g>
+
+          <!-- L6 RWA -->
+          <g class="arch-layer" data-layer="1">
+            <rect class="layer-bg" x="80" y="100" width="340" height="48" fill="#111118" stroke="#2a2a35" stroke-width="0.8"/>
+            <text x="100" y="128" font-family="Fraunces" font-size="11" font-style="italic" fill="#7d7560" font-variation-settings="'opsz' 24, 'SOFT' 100">L6</text>
+            <text x="130" y="128" class="schema-text">RWA PRIMITIVES</text>
+            <text x="400" y="128" text-anchor="end" class="schema-text-muted">ASSET STD LIB</text>
+          </g>
+
+          <!-- L5 Bridging -->
+          <g class="arch-layer" data-layer="2">
+            <rect class="layer-bg" x="80" y="160" width="340" height="48" fill="#111118" stroke="#2a2a35" stroke-width="0.8"/>
+            <text x="100" y="188" font-family="Fraunces" font-size="11" font-style="italic" fill="#7d7560" font-variation-settings="'opsz' 24, 'SOFT' 100">L5</text>
+            <text x="130" y="188" class="schema-text">BRIDGING</text>
+            <text x="400" y="188" text-anchor="end" class="schema-text-muted">OMNICHAIN DVN</text>
+            <!-- side bridge marks -->
+            <line x1="60" y1="184" x2="80" y2="184" stroke="#7d7560" stroke-width="0.4" stroke-dasharray="2 2"/>
+            <line x1="60" y1="190" x2="80" y2="190" stroke="#7d7560" stroke-width="0.4" stroke-dasharray="2 2"/>
+            <line x1="60" y1="196" x2="80" y2="196" stroke="#7d7560" stroke-width="0.4" stroke-dasharray="2 2"/>
+            <line x1="420" y1="184" x2="440" y2="184" stroke="#7d7560" stroke-width="0.4" stroke-dasharray="2 2"/>
+            <line x1="420" y1="190" x2="440" y2="190" stroke="#7d7560" stroke-width="0.4" stroke-dasharray="2 2"/>
+            <line x1="420" y1="196" x2="440" y2="196" stroke="#7d7560" stroke-width="0.4" stroke-dasharray="2 2"/>
+            <text x="50" y="187" text-anchor="end" class="schema-text-muted" style="font-size:7px;">ETH</text>
+            <text x="450" y="187" class="schema-text-muted" style="font-size:7px;">SOL</text>
+          </g>
+
+          <!-- L4 Oracles -->
+          <g class="arch-layer" data-layer="3">
+            <rect class="layer-bg" x="80" y="220" width="340" height="48" fill="#111118" stroke="#2a2a35" stroke-width="0.8"/>
+            <text x="100" y="248" font-family="Fraunces" font-size="11" font-style="italic" fill="#7d7560" font-variation-settings="'opsz' 24, 'SOFT' 100">L4</text>
+            <text x="130" y="248" class="schema-text">ENSHRINED ORACLES</text>
+            <text x="400" y="248" text-anchor="end" class="schema-text-muted">CONSENSUS-VERIFIED</text>
+          </g>
+
+          <!-- L3 PoR -->
+          <g class="arch-layer" data-layer="4">
+            <rect class="layer-bg" x="80" y="280" width="340" height="48" fill="#111118" stroke="#2a2a35" stroke-width="0.8"/>
+            <text x="100" y="308" font-family="Fraunces" font-size="11" font-style="italic" fill="#7d7560" font-variation-settings="'opsz' 24, 'SOFT' 100">L3</text>
+            <text x="130" y="308" class="schema-text">PROOF OF RESERVES</text>
+            <text x="400" y="308" text-anchor="end" class="schema-text-muted">CUSTODY ATTEST.</text>
+            <!-- custodian indicators -->
+            <line x1="40" y1="304" x2="80" y2="304" stroke="#7d7560" stroke-width="0.4" stroke-dasharray="2 2"/>
+            <text x="36" y="306" text-anchor="end" class="schema-text-muted" style="font-size:7px;">BLACKROCK</text>
+          </g>
+
+          <!-- L2 Validators -->
+          <g class="arch-layer" data-layer="5">
+            <rect class="layer-bg" x="80" y="340" width="340" height="48" fill="#111118" stroke="#2a2a35" stroke-width="0.8"/>
+            <text x="100" y="368" font-family="Fraunces" font-size="11" font-style="italic" fill="#7d7560" font-variation-settings="'opsz' 24, 'SOFT' 100">L2</text>
+            <text x="130" y="368" class="schema-text">VALIDATOR SET</text>
+            <text x="400" y="368" text-anchor="end" class="schema-text-muted">PERMISSIONED · INSTITUTIONAL</text>
+            <!-- validator dots -->
+            <circle cx="20" cy="364" r="3" fill="#4a7a5e"/>
+            <circle cx="20" cy="376" r="3" fill="#4a7a5e"/>
+            <circle cx="480" cy="364" r="3" fill="#4a7a5e"/>
+            <circle cx="480" cy="376" r="3" fill="#4a7a5e"/>
+          </g>
+
+          <!-- L1 Consensus -->
+          <g class="arch-layer" data-layer="6">
+            <rect class="layer-bg" x="80" y="400" width="340" height="48" fill="#111118" stroke="#2a2a35" stroke-width="0.8"/>
+            <text x="100" y="428" font-family="Fraunces" font-size="11" font-style="italic" fill="#7d7560" font-variation-settings="'opsz' 24, 'SOFT' 100">L1</text>
+            <text x="130" y="428" class="schema-text">CONSENSUS</text>
+            <text x="400" y="428" text-anchor="end" class="schema-text-muted">COMETBFT · 1S FINAL</text>
+          </g>
+
+          <!-- Bottom annotation -->
+          <line x1="80" y1="475" x2="420" y2="475" stroke="#2a2a35" stroke-width="0.4" stroke-dasharray="2 2"/>
+          <text x="250" y="495" text-anchor="middle" class="schema-text-muted" style="letter-spacing:3px;">SEVEN LAYERS · ONE CHAIN</text>
+          <text x="250" y="510" text-anchor="middle" font-family="Fraunces" font-size="10" font-style="italic" fill="#5d5645" font-variation-settings="'opsz' 14, 'SOFT' 100">cosmos sdk + evm + cometbft</text>
+        </svg>
+      </div>
+
+      <!-- Detail panel -->
+      <div class="arch-detail" id="archDetail">
+        <!-- populated by JS -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ PARTNERS ================ -->
+<section>
+  <div class="sec-marker">VI</div>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-num">§ 06<span>Counterparty Stack</span></div>
+      <div>
+        <h2 class="section-title">Tokens are easy. The <em>partners</em> behind them are the product.</h2>
+        <p class="section-sub">Twelve institutions sit between an Ondo token and the U.S. Treasury that backs it. Each is a load-bearing piece of the architecture.</p>
+      </div>
+    </div>
+
+    <div class="partners-grid">
+      <div class="partner is-not-last-row">
+        <span class="partner-num">01</span>
+        <div class="partner-cat">Asset Manager</div>
+        <div class="partner-name">BlackRock</div>
+        <div class="partner-role">BUIDL fund — primary OUSG backing</div>
+      </div>
+      <div class="partner is-not-last-row">
+        <span class="partner-num">02</span>
+        <div class="partner-cat">Asset Manager</div>
+        <div class="partner-name">Franklin Templeton</div>
+        <div class="partner-role">BENJI on-chain money market fund</div>
+      </div>
+      <div class="partner is-not-last-row">
+        <span class="partner-num">03</span>
+        <div class="partner-cat">Asset Manager</div>
+        <div class="partner-name">WisdomTree</div>
+        <div class="partner-role">RWA liquidity pool · market making</div>
+      </div>
+      <div class="partner is-not-last-row">
+        <span class="partner-num">04</span>
+        <div class="partner-cat">Asset Manager</div>
+        <div class="partner-name">Fidelity / Wellington</div>
+        <div class="partner-role">Diversified Treasury fund exposure</div>
+      </div>
+      <div class="partner is-not-last-row">
+        <span class="partner-num">05</span>
+        <div class="partner-cat">Custodian</div>
+        <div class="partner-name">Coinbase</div>
+        <div class="partner-role">USDC ↔ USD on/off-ramp · cash custody</div>
+      </div>
+      <div class="partner is-not-last-row">
+        <span class="partner-num">06</span>
+        <div class="partner-cat">Custodian</div>
+        <div class="partner-name">Fireblocks</div>
+        <div class="partner-role">Institutional digital-asset custody</div>
+      </div>
+      <div class="partner is-not-last-row">
+        <span class="partner-num">07</span>
+        <div class="partner-cat">Custodian</div>
+        <div class="partner-name">Zodia Custody</div>
+        <div class="partner-role">USDY underlying asset safekeeping</div>
+      </div>
+      <div class="partner is-not-last-row">
+        <span class="partner-num">08</span>
+        <div class="partner-cat">Broker / Dealer</div>
+        <div class="partner-name">Oasis Pro</div>
+        <div class="partner-role">SEC-registered ATS &amp; transfer agent</div>
+      </div>
+      <div class="partner">
+        <span class="partner-num">09</span>
+        <div class="partner-cat">Infrastructure</div>
+        <div class="partner-name">Google Cloud</div>
+        <div class="partner-role">Validator hosting · Ondo Chain</div>
+      </div>
+      <div class="partner">
+        <span class="partner-num">10</span>
+        <div class="partner-cat">Compliance</div>
+        <div class="partner-name">Ernst &amp; Young</div>
+        <div class="partner-role">On-chain audit · GAAP / IFRS reconciliation</div>
+      </div>
+      <div class="partner">
+        <span class="partner-num">11</span>
+        <div class="partner-cat">Bridging</div>
+        <div class="partner-name">LayerZero</div>
+        <div class="partner-role">Omnichain messaging · DVN architecture</div>
+      </div>
+      <div class="partner">
+        <span class="partner-num">12</span>
+        <div class="partner-cat">Oracle</div>
+        <div class="partner-name">Pyth Network</div>
+        <div class="partner-role">Real-time price feeds · sub-second</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ CALCULATOR ================ -->
+<section>
+  <div class="sec-marker">VII</div>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-num">§ 07<span>Yield, Quantified</span></div>
+      <div>
+        <h2 class="section-title">What does this <em>actually pay</em>?</h2>
+        <p class="section-sub">An illustrative compounder. Adjust principal, time horizon, and product. The curve below traces the projected growth.</p>
+      </div>
+    </div>
+
+    <div class="calc">
+      <div class="calc-controls">
+        <label>Select product</label>
+        <div class="calc-product" id="calcProduct">
+          <button class="active" data-apy="5.30" data-name="USDY">USDY · 5.30%</button>
+          <button data-apy="3.49" data-name="OUSG">OUSG · 3.49%</button>
+          <button data-apy="4.20" data-name="rUSDY">rUSDY · 4.20%</button>
+        </div>
+
+        <label>Principal (USD)</label>
+        <input type="number" class="calc-input" id="calcPrincipal" value="100000" min="5000" step="1000">
+        <input type="range" class="calc-slider" id="calcSlider" min="5000" max="10000000" step="5000" value="100000">
+        <div style="display:flex; justify-content:space-between; font-family:var(--mono); font-size:9.5px; color:var(--muted-2); margin-top:0.4rem; letter-spacing:0.15em;">
+          <span>$5K MIN</span><span>$10M</span>
+        </div>
+
+        <label style="margin-top:2.2rem;">Holding period</label>
+        <input type="range" class="calc-slider" id="calcYears" min="1" max="10" step="1" value="3">
+        <div style="display:flex; justify-content:space-between; font-family:var(--mono); font-size:9.5px; color:var(--muted-2); margin-top:0.4rem; letter-spacing:0.15em;">
+          <span>1 YR</span><span id="calcYearsLabel">3 YR</span><span>10 YR</span>
+        </div>
+      </div>
+
+      <div class="calc-output">
+        <div>
+          <div class="calc-output-label">Projected Portfolio Value</div>
+          <div class="calc-output-val"><span class="sym">$</span><span id="calcResult">115,837</span></div>
+        </div>
+        <div class="calc-curve">
+          <svg id="calcCurve" viewBox="0 0 400 100" preserveAspectRatio="none">
+            <polyline id="calcLine" fill="none" stroke="#c9a961" stroke-width="1.4" points=""/>
+            <polyline id="calcArea" fill="rgba(201,169,97,0.08)" stroke="none" points=""/>
+          </svg>
+        </div>
+        <div class="calc-breakdown">
+          <div><span>PRINCIPAL</span><strong id="calcPrincipalDisplay">$100,000</strong></div>
+          <div><span>INTEREST EARNED</span><strong id="calcInterest">$15,837</strong></div>
+          <div><span>PRODUCT</span><strong id="calcProductName">USDY @ 5.30%</strong></div>
+          <div><span>COMPOUNDING</span><strong>Daily NAV update</strong></div>
+        </div>
+        <p class="calc-disclaimer">Illustrative — assumes constant APY and daily compounding. Actual yields fluctuate with the federal funds rate. Not investment advice. Net of stated 0.15% management fee where applicable; OUSG management fee waived through July 2026.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ RISKS ================ -->
+<section>
+  <div class="sec-marker">VIII</div>
+  <div class="container">
+    <div class="section-head">
+      <div class="section-num">§ 08<span>What Can Go Wrong</span></div>
+      <div>
+        <h2 class="section-title">The <em>honest list</em> of risks an architect should price in.</h2>
+      </div>
+    </div>
+
+    <div class="risks">
+      <div class="risk">
+        <div class="risk-num">i</div>
+        <div class="risk-tag">Risk · 01</div>
+        <h3 class="risk-title">Custody &amp; counterparty</h3>
+        <p class="risk-body">Token holders ultimately depend on BlackRock, Coinbase, Fireblocks, and Zodia honouring their custodial obligations. A failure at any of these — operational, regulatory, or fraud — flows straight to the on-chain token. Diversification across custodians is the mitigation, but not elimination.</p>
+      </div>
+      <div class="risk">
+        <div class="risk-num">ii</div>
+        <div class="risk-tag">Risk · 02</div>
+        <h3 class="risk-title">Regulatory drift</h3>
+        <p class="risk-body">USDY relies on Reg S exemption; OUSG on Reg D 506(c) and 3(c)(7) status. The SEC closed its multi-year Ondo investigation in late 2025 without charges, and the CLARITY Act has provided structural clarity, but jurisdictional rules continue to evolve and could narrow distribution.</p>
+      </div>
+      <div class="risk">
+        <div class="risk-num">iii</div>
+        <div class="risk-tag">Risk · 03</div>
+        <h3 class="risk-title">Smart contract &amp; bridge risk</h3>
+        <p class="risk-body">Ondo's contracts are audited and battle-tested, but bridges remain the highest-risk surface in crypto. The LayerZero-based Ondo Bridge concentrates trust in the decentralized verifier network; researchers tracked $14.6M in RWA exploits in 1H 2025 alone. Defence in depth still matters.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================ FOOTER ================ -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-mark">Ondo Finance — How It Works</div>
+        <p class="footer-text">An independent architectural explainer of the Ondo Finance protocol, its products, and its underlying counterparty network. Figures sourced from Ondo Finance documentation, RWA.xyz, DeFiLlama, CoinDesk, Messari, Coincub, and the Stellar Development Foundation, current as of April–May 2026. This page is for educational purposes only and does not constitute investment advice.</p>
+      </div>
+      <div class="footer-meta">
+        <div class="footer-meta-title">Composition</div>
+        <div>Type<strong>Fraunces · Spectral · JetBrains Mono</strong></div>
+        <div>Format<strong>Single-File HTML / Vanilla JS</strong></div>
+        <div>Reviewed<strong>May 2026</strong></div>
+      </div>
+      <div class="footer-meta">
+        <div class="footer-meta-title">Audience</div>
+        <div>Primary<strong>Banking Architects</strong></div>
+        <div>Secondary<strong>Treasury · Compliance</strong></div>
+        <div>Edition<strong>Volume I</strong></div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>◆ Editorial Explainer Series</span>
+      <span class="footer-fleur">❖ ◆ ❖</span>
+      <span>Set in cold metal — figuratively</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ================ PRODUCT TABS ================ */
+const productTabs = document.querySelectorAll('.product-tab');
+const productPanels = document.querySelectorAll('.product-panel');
+productTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.product;
+    productTabs.forEach(t => t.classList.toggle('active', t === tab));
+    productPanels.forEach(p => p.classList.toggle('active', p.dataset.product === target));
+  });
+});
+
+/* ================ MINT/REDEEM FLOW ================ */
+const flowData = {
+  mint: [
+    {
+      title: "Onboard & KYC",
+      sub: "T+0 · Off-chain compliance gate",
+      body: "The investor completes identity verification, sanctions screening, and accreditation/jurisdiction checks. For OUSG this means proving Qualified Purchaser status; for USDY, demonstrating non-U.S. residence. Once cleared, the wallet address is added to an on-chain allow-list registry. This single registry is checked by every transfer hook on every Ondo token.",
+      meta: [
+        { l: "Typical Duration", v: "1–3 business days" },
+        { l: "Providers", v: "Sumsub · Persona · Chainalysis" },
+        { l: "On-Chain Artifact", v: "Allow-list registry" }
+      ]
+    },
+    {
+      title: "Deposit USDC",
+      sub: "T+0 · Wallet → smart contract",
+      body: "The user calls subscribe() on the OUSG or USDY smart contract, transferring USDC (or PYUSD for OUSG). The contract validates the sender is on the allow-list, reads the current NAV from the oracle, and computes the token quantity to mint: USDC ÷ NAV.",
+      meta: [
+        { l: "Entry Asset", v: "USDC · PYUSD · USD wire ≥$100K" },
+        { l: "Min. Size", v: "$5,000 (instant) · $100K (wire)" },
+        { l: "Fee", v: "0% mint fee" }
+      ]
+    },
+    {
+      title: "Smart Contract Routing",
+      sub: "T+0 · On-chain logic",
+      body: "The contract atomically performs three actions: (1) burns the user's USDC into the fund's omnibus wallet, (2) emits a Subscribe event consumed by Ondo's off-chain treasury operations, and (3) mints the OUSG/USDY tokens directly to the user's wallet. The user holds yield-bearing tokens within seconds of the deposit confirming.",
+      meta: [
+        { l: "Execution", v: "Atomic · single transaction" },
+        { l: "Settlement", v: "Block finality (~12s ETH)" },
+        { l: "Event Emitted", v: "Subscribe(user, asset, amt, nav)" }
+      ]
+    },
+    {
+      title: "Custody Routing",
+      sub: "T+1 · Off-chain settlement",
+      body: "On the next business day, Ondo's operations team converts the deposited USDC into USD via Coinbase Prime, and routes the proceeds to the relevant custodial wallet — Fireblocks for USDY, the BUIDL subscription account for OUSG. The 24/7 instant mint is funded from a USDC liquidity buffer the fund maintains for exactly this purpose.",
+      meta: [
+        { l: "Off-Ramp", v: "Coinbase Prime" },
+        { l: "Buffer", v: "USDC + bank deposits" },
+        { l: "Custody", v: "Fireblocks · Zodia · BUIDL" }
+      ]
+    },
+    {
+      title: "Treasury Purchase",
+      sub: "T+1 to T+2 · Asset acquisition",
+      body: "USD is deployed into short-term U.S. Treasuries via the underlying funds. For OUSG, this is mostly subscriptions into BlackRock's BUIDL fund, which itself holds T-bills. For USDY, the fund directly holds short-dated Treasuries plus bank demand deposits. From this point onward, daily Treasury interest accrues to the fund's NAV.",
+      meta: [
+        { l: "Instruments", v: "T-bills · government MMF shares" },
+        { l: "Duration", v: "Short-term (sub-12-month)" },
+        { l: "Yield Accrual", v: "Daily, into per-token NAV" }
+      ]
+    },
+    {
+      title: "Tokens Live & Earning",
+      sub: "T+0 onward · 24/7 yield",
+      body: "From the moment of mint, the user's token reflects accruing yield — the price drifts up daily (accumulating) or new tokens appear in the wallet (rebasing). Tokens are now freely transferable between allow-listed addresses, usable as collateral on Flux Finance, bridgeable across nine chains, and redeemable instantly back to USDC at NAV.",
+      meta: [
+        { l: "Transfer", v: "Allow-list to allow-list" },
+        { l: "Composability", v: "Flux · Pendle · DeFi" },
+        { l: "Redemption", v: "Instant via USDC at NAV" }
+      ]
+    }
+  ],
+  redeem: [
+    {
+      title: "Submit Redemption",
+      sub: "T+0 · On-chain instruction",
+      body: "The holder calls redeem() with the OUSG/USDY amount they wish to exit. The contract checks balance and allow-list eligibility, then computes the USD value: tokens × NAV. Note: tokens redeemed prior to today's NAV update do not earn that day's yield — whoever holds at the rebase moment receives the yield.",
+      meta: [
+        { l: "Min", v: "$5,000 instant · $50K non-instant" },
+        { l: "Asset Out", v: "USDC (instant) or USD wire" },
+        { l: "Window", v: "24/7/365 for instant" }
+      ]
+    },
+    {
+      title: "Burn & Reserve Lock",
+      sub: "T+0 · On-chain settlement",
+      body: "The contract burns the user's tokens and reserves the equivalent USDC from the liquidity buffer. The buffer exists precisely so retail-sized redemptions don't require waiting on T+1 fund redemption mechanics. Larger redemptions trigger an upstream redemption from BUIDL or the underlying fund.",
+      meta: [
+        { l: "Execution", v: "Atomic burn + USDC release" },
+        { l: "Buffer Size", v: "Sized to 24-hour window" },
+        { l: "Fallback", v: "Upstream BUIDL redemption" }
+      ]
+    },
+    {
+      title: "USDC Released",
+      sub: "T+0 · Wallet receives stablecoin",
+      body: "USDC equal to the redemption value is released to the user's wallet on the same chain where they redeemed. For non-U.S. USDY holders redeeming over $100K, USD wire to a non-U.S. bank account is supported (USD wire only — stablecoin payouts are not allowed for compliance reasons).",
+      meta: [
+        { l: "Output (instant)", v: "USDC on originating chain" },
+        { l: "Output (large)", v: "USD wire, non-U.S. bank only" },
+        { l: "Timing", v: "Same block · or 1–3 days" }
+      ]
+    },
+    {
+      title: "Fund Rebalance",
+      sub: "T+1 · Off-chain operations",
+      body: "Ondo's treasury team rebalances the fund: if the buffer was drawn down materially, they redeem shares of BUIDL or sell short-dated Treasuries to refill. The chain-level user experience is decoupled from this — the buffer absorbs the timing mismatch between instant on-chain redemption and slower off-chain Treasury settlement.",
+      meta: [
+        { l: "Trigger", v: "Buffer threshold breach" },
+        { l: "Tools", v: "BUIDL redemption · T-bill secondary" },
+        { l: "Visible to user", v: "No — buffer abstracts T+1" }
+      ]
+    },
+    {
+      title: "NAV Update",
+      sub: "T+1 · Daily oracle write",
+      body: "The next business day, the fund publishes an updated NAV reflecting the previous day's Treasury income (and adjusts further once final actuals arrive). This NAV write is what causes accumulating tokens to rise in price and triggers the rebasing wrapper to mint new rOUSG/rUSDY to existing holders.",
+      meta: [
+        { l: "Frequency", v: "Each U.S. business day" },
+        { l: "Mechanism", v: "On-chain NAV oracle write" },
+        { l: "Side Effect", v: "Price↑ or balance↑" }
+      ]
+    },
+    {
+      title: "Position Closed",
+      sub: "Final state",
+      body: "The user has fully exited their tokenized Treasury position back to USDC (or USD). All transfer events, the redemption, the NAV at exit, and the yield earned are permanently recorded on-chain — providing a clean audit trail that traditional fund accounting often takes weeks to reconcile. From subscription to exit, every state transition is a deterministic function of public on-chain data.",
+      meta: [
+        { l: "Audit Trail", v: "Public, immutable" },
+        { l: "Tax Reporting", v: "1099-INT-equivalent" },
+        { l: "Reconciliation", v: "Real-time vs monthly" }
+      ]
+    }
+  ]
+};
+
+let currentFlow = 'mint';
+let currentStep = 0;
+
+function renderFlowDetail() {
+  const data = flowData[currentFlow][currentStep];
+  const ROMAN = ['i','ii','iii','iv','v','vi'];
+  const detail = document.getElementById('flowDetail');
+  detail.innerHTML = `
+    <div class="flow-detail-main">
+      <div class="flow-step-num-big">${ROMAN[currentStep]}</div>
+      <div class="flow-detail-sub">Step ${String(currentStep + 1).padStart(2, '0')} of 06 · ${data.sub}</div>
+      <div class="flow-detail-title">${data.title}</div>
+      <div class="flow-detail-body">${data.body}</div>
+      <div class="flow-step-prev-next">
+        <button onclick="stepFlow(-1)">← Previous</button>
+        <button onclick="stepFlow(1)">Next →</button>
+      </div>
+    </div>
+    <div class="flow-detail-meta">
+      ${data.meta.map(m => `<div class="flow-detail-meta-row"><div class="l">${m.l}</div><div class="v">${m.v}</div></div>`).join('')}
+    </div>
+  `;
+  // Highlight active SVG node
+  document.querySelectorAll('.flow-node').forEach((n, i) => {
+    const bg = n.querySelector('.node-bg');
+    if (bg) {
+      if (i === currentStep) {
+        bg.setAttribute('fill', 'rgba(201,169,97,0.12)');
+        bg.setAttribute('stroke-width', '1.6');
+      } else {
+        bg.setAttribute('fill', '#111118');
+        bg.setAttribute('stroke-width', '1');
+      }
+    }
+  });
+}
+
+function stepFlow(dir) {
+  currentStep = (currentStep + dir + 6) % 6;
+  renderFlowDetail();
+}
+
+document.querySelectorAll('.flow-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentFlow = btn.dataset.flow;
+    currentStep = 0;
+    document.querySelectorAll('.flow-toggle').forEach(b => b.classList.toggle('active', b === btn));
+    renderFlowDetail();
+  });
+});
+
+document.querySelectorAll('.flow-node').forEach((n, i) => {
+  n.addEventListener('click', () => {
+    currentStep = i;
+    renderFlowDetail();
+  });
+});
+
+document.addEventListener('keydown', e => {
+  // Don't trigger when typing in inputs
+  if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.key === 'ArrowRight') { stepFlow(1); }
+  else if (e.key === 'ArrowLeft') { stepFlow(-1); }
+});
+
+renderFlowDetail();
+
+/* ================ REBASING SIM ================ */
+const APY = 0.053;
+const DAILY = Math.pow(1 + APY, 1/365) - 1;
+let simDay = 0;
+let accumPrice = 1.0;
+let rebaseBal = 100;
+let accumHistory = [{x:0, y:1.0}];
+let rebaseHistory = [{x:0, y:100}];
+const MAX_DAYS = 60;
+
+function paintRebase() {
+  document.getElementById('accumDay').textContent = simDay;
+  document.getElementById('accumBal').textContent = '100.0000';
+  document.getElementById('accumPrice').textContent = '$' + accumPrice.toFixed(4);
+  document.getElementById('accumUsd').textContent = '$' + (100 * accumPrice).toFixed(2);
+
+  document.getElementById('rebaseDay').textContent = simDay;
+  document.getElementById('rebaseBal').textContent = rebaseBal.toFixed(4);
+  document.getElementById('rebasePrice').textContent = '$1.0000';
+  document.getElementById('rebaseUsd').textContent = '$' + rebaseBal.toFixed(2);
+
+  // Render charts
+  const W = 300, H = 80;
+  const xMax = Math.max(MAX_DAYS, simDay);
+
+  // Accum: y from 1.0 baseline up
+  const accumYMax = Math.max(1.01, accumPrice);
+  const accumPts = accumHistory.map(p => `${(p.x/xMax*W).toFixed(1)},${(H - 5 - ((p.y - 1)/(accumYMax - 1 + 0.0001) * (H-15))).toFixed(1)}`).join(' ');
+  document.getElementById('accumChart').setAttribute('points', accumPts || `0,${H-5}`);
+
+  const rebaseYMax = Math.max(101, rebaseBal);
+  const rebasePts = rebaseHistory.map(p => `${(p.x/xMax*W).toFixed(1)},${(H - 5 - ((p.y - 100)/(rebaseYMax - 100 + 0.0001) * (H-15))).toFixed(1)}`).join(' ');
+  document.getElementById('rebaseChart').setAttribute('points', rebasePts || `0,${H-5}`);
+}
+
+function tickRebase() {
+  simDay += 1;
+  accumPrice *= (1 + DAILY);
+  rebaseBal *= (1 + DAILY);
+  accumHistory.push({x: simDay, y: accumPrice});
+  rebaseHistory.push({x: simDay, y: rebaseBal});
+  paintRebase();
+}
+
+function resetRebase() {
+  simDay = 0;
+  accumPrice = 1.0;
+  rebaseBal = 100;
+  accumHistory = [{x:0, y:1.0}];
+  rebaseHistory = [{x:0, y:100}];
+  paintRebase();
+}
+
+paintRebase();
+
+/* ================ ARCHITECTURE ================ */
+const archData = [
+  {
+    tag: "L7 · Application Layer",
+    title: "EVM-compatible smart contracts",
+    body: "Solidity contracts deploy unchanged from Ethereum, Base, Polygon. Foundry, Hardhat, ethers.js, and viem all work natively. For developers, Ondo Chain is just a faster, cheaper EVM with stricter validator selection — the application surface is identical.",
+    bullets: [
+      "Solidity / Vyper smart contracts",
+      "EVM precompiles for RWA-specific operations",
+      "Standard wallet UX (MetaMask, Rabby, hardware)"
+    ]
+  },
+  {
+    tag: "L6 · RWA Standards",
+    title: "An asset-protocol library built into the chain",
+    body: "Rather than every issuer reimplementing transfer restrictions, dividend payouts, or corporate actions from scratch, Ondo Chain ships a standardized RWA contract library. Stock splits, coupon payments, tax withholding, and beneficial-owner registry hooks are all chain-native primitives.",
+    bullets: [
+      "Standardized transfer-restriction interface",
+      "Native dividend / coupon distribution",
+      "Corporate action handling (splits, mergers)",
+      "Beneficial-owner registry hooks"
+    ]
+  },
+  {
+    tag: "L5 · Bridging",
+    title: "Native omnichain via decentralized verifier networks",
+    body: "Ondo Bridge replaces traditional wrapped-token bridges with LayerZero's DVN architecture — a configurable set of verifiers that must independently attest to a cross-chain message before it executes. Tokens move natively across nine chains without lossy wrapping.",
+    bullets: [
+      "LayerZero v2 DVN-based messaging",
+      "Multi-attestation security model",
+      "No wrapped-token slippage / liquidity fragmentation",
+      "Compliance metadata travels with the asset"
+    ]
+  },
+  {
+    tag: "L4 · Enshrined Oracles",
+    title: "Off-chain data verified at consensus",
+    body: "Most chains treat oracles as application-layer concerns. Ondo Chain bakes oracle attestations into block production: validators must include and sign signed price feeds and Treasury rate data as part of consensus. Asset prices, NAVs, and reserve balances become first-class on-chain state, not third-party feeds.",
+    bullets: [
+      "50+ licensed data providers (Bloomberg, Reuters, Pyth)",
+      "Validator-signed at block production",
+      "Sub-0.05% data error rate (vendor-reported)",
+      "Zero-knowledge attestation for sensitive data"
+    ]
+  },
+  {
+    tag: "L3 · Proof of Reserves",
+    title: "Custody attestations as consensus state",
+    body: "Custodian balances at BlackRock, Fireblocks, Coinbase Prime, and Zodia are continuously attested into the chain's state trie. Any divergence between minted token supply and attested reserves is detectable in real time — and validators are economically penalized for signing inconsistent state.",
+    bullets: [
+      "Real-time custodian balance attestation",
+      "Cryptographic reconciliation of supply vs. reserves",
+      "On-chain alerting for divergence",
+      "Replaces quarterly auditor attestation reports"
+    ]
+  },
+  {
+    tag: "L2 · Validator Set",
+    title: "Permissioned, institutional, RWA-staked",
+    body: "Validators are pre-approved regulated financial institutions — not anonymous nodes. They stake high-quality liquid assets (tokenized Treasuries, OUSG itself) instead of a volatile native token, aligning incentives with the actual collateral securing the network. MEV and front-running on tokenized equity orders are structurally prevented because every validator is identified, regulated, and accountable.",
+    bullets: [
+      "Pre-approved regulated FIs only",
+      "MEV-resistant by validator selection",
+      "Staking with tokenized RWAs (no native-token tail risk)",
+      "KYC at the consensus layer, not application layer"
+    ]
+  },
+  {
+    tag: "L1 · Consensus",
+    title: "CometBFT — sub-second finality",
+    body: "Ondo Chain runs CometBFT (the BFT consensus inherited from Tendermint, packaged in the Cosmos SDK), which provides instant finality and ~1-second blocks. For tokenized equity trading and high-velocity treasury operations, this matters: settlement is final the moment a block is signed, not after multiple confirmations as on probabilistic-finality chains.",
+    bullets: [
+      "Instant economic finality",
+      "~1-second blocks, sub-second to commit",
+      "Cosmos SDK module composition",
+      "IBC-compatible for cross-Cosmos liquidity"
+    ]
+  }
+];
+
+function renderArch(idx) {
+  const d = archData[idx];
+  document.getElementById('archDetail').innerHTML = `
+    <div class="arch-detail-tag">${d.tag}</div>
+    <div class="arch-detail-title">${d.title}</div>
+    <div class="arch-detail-body">${d.body}</div>
+    <ul class="arch-bullets">
+      ${d.bullets.map(b => `<li>${b}</li>`).join('')}
+    </ul>
+  `;
+  // Update SVG layer styling
+  document.querySelectorAll('.arch-layer').forEach((l, i) => {
+    const bg = l.querySelector('.layer-bg');
+    const num = l.querySelector('text:first-of-type');
+    const name = l.querySelectorAll('text')[1];
+    if (i === idx) {
+      l.classList.add('active');
+      bg.setAttribute('fill', 'rgba(201,169,97,0.06)');
+      bg.setAttribute('stroke', '#c9a961');
+      bg.setAttribute('stroke-width', '1');
+      if (num) num.setAttribute('fill', '#c9a961');
+      if (name) name.setAttribute('fill', '#c9a961');
+    } else {
+      l.classList.remove('active');
+      bg.setAttribute('fill', '#111118');
+      bg.setAttribute('stroke', '#2a2a35');
+      bg.setAttribute('stroke-width', '0.8');
+      if (num) num.setAttribute('fill', '#7d7560');
+      if (name) name.setAttribute('fill', '#f1ead8');
+    }
+  });
+}
+
+document.querySelectorAll('.arch-layer').forEach((l, i) => {
+  l.addEventListener('click', () => renderArch(i));
+});
+
+renderArch(0);
+
+/* ================ CALCULATOR ================ */
+let calcAPY = 5.30;
+let calcName = 'USDY';
+
+function recompute() {
+  const principal = parseFloat(document.getElementById('calcPrincipal').value) || 0;
+  const years = parseInt(document.getElementById('calcYears').value);
+  const rate = calcAPY / 100;
+  const fv = principal * Math.pow(1 + rate, years);
+  const interest = fv - principal;
+
+  document.getElementById('calcResult').textContent = fv.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  document.getElementById('calcInterest').textContent = '$' + interest.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  document.getElementById('calcPrincipalDisplay').textContent = '$' + principal.toLocaleString('en-US');
+  document.getElementById('calcProductName').textContent = `${calcName} @ ${calcAPY.toFixed(2)}%`;
+  document.getElementById('calcYearsLabel').textContent = `${years} YR`;
+
+  // Build the curve
+  const W = 400, H = 100;
+  const points = [];
+  const N = 60;
+  for (let i = 0; i <= N; i++) {
+    const t = (i / N) * years;
+    const v = principal * Math.pow(1 + rate, t);
+    const x = (i / N) * W;
+    const y = H - 5 - ((v - principal) / (fv - principal + 0.0001)) * (H - 15);
+    points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  document.getElementById('calcLine').setAttribute('points', points.join(' '));
+  // Area: same line + close to bottom
+  const area = points.join(' ') + ` ${W},${H} 0,${H}`;
+  document.getElementById('calcArea').setAttribute('points', area);
+}
+
+document.getElementById('calcPrincipal').addEventListener('input', e => {
+  document.getElementById('calcSlider').value = Math.min(parseFloat(e.target.value) || 5000, 10000000);
+  recompute();
+});
+document.getElementById('calcSlider').addEventListener('input', e => {
+  document.getElementById('calcPrincipal').value = e.target.value;
+  recompute();
+});
+document.getElementById('calcYears').addEventListener('input', recompute);
+
+document.querySelectorAll('#calcProduct button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    calcAPY = parseFloat(btn.dataset.apy);
+    calcName = btn.dataset.name;
+    document.querySelectorAll('#calcProduct button').forEach(b => b.classList.toggle('active', b === btn));
+    recompute();
+  });
+});
+
+recompute();
+
+/* ================ SCROLL REVEAL ================ */
+document.querySelectorAll('section').forEach(s => s.classList.add('reveal'));
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) e.target.classList.add('in');
+  });
+}, { threshold: 0.05 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+
+</body>
+</html>
